@@ -1,0 +1,1458 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <title>TitanMoisture (Moisture Notes v0.1)</title>
+
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    :root{
+      --navy:#0B2A3A;
+      --navy2:#0E3348;
+
+      --bg:#F5F7FB;
+      --panel:#FFFFFF;
+      --border:#E5EAF1;
+      --text:#0F172A;
+      --sub:#64748B;
+
+      /* TitanRoof palette reused */
+      --c-ts:#DC2626;   /* red */
+      --c-apt:#111827;  /* gray/black */
+      --c-ds:#2563EB;   /* blue */
+      --c-wind:#16A34A; /* green */
+      --c-obs:#9333EA;  /* purple */
+
+      /* Moisture accents (still on-brand) */
+      --c-aoi: var(--c-obs);      /* Areas of Interest = purple */
+      --c-read: var(--c-ds);      /* Readings = blue */
+      --c-src: var(--c-wind);     /* Suspected source = green */
+      --c-note: var(--c-apt);     /* General note = charcoal */
+
+      --teal:#0BA7A5;
+
+      --shadow: 0 14px 28px rgba(2,6,23,0.10);
+      --shadowSoft: 0 10px 20px rgba(2,6,23,0.07);
+      --ring: 0 0 0 3px rgba(11,167,165,0.18);
+
+      --glass: rgba(255,255,255,0.72);
+      --glass2: rgba(255,255,255,0.86);
+      --glassBorder: rgba(226,232,240,0.70);
+    }
+
+    *{ box-sizing:border-box; }
+    html, body{
+      margin:0;
+      height:100%;
+      overflow:hidden;
+      background:var(--bg);
+      color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      -webkit-text-size-adjust: 100%;
+    }
+
+    .app{
+      display:grid;
+      grid-template-columns: 1fr minmax(320px, 420px);
+      height:100vh;
+      min-height:100vh;
+    }
+
+    /* ========= CANVAS ZONE ========= */
+    .canvasZone{
+      position:relative;
+      overflow:hidden;
+      user-select:none;
+      -webkit-user-select:none;
+      background:
+        radial-gradient(1200px 700px at 20% 15%, rgba(11,167,165,0.10), transparent 55%),
+        radial-gradient(900px 600px at 80% 70%, rgba(37,99,235,0.10), transparent 55%),
+        #E9EEF5;
+    }
+    .viewport{
+      position:absolute;
+      inset:0;
+      overflow:hidden;
+      touch-action:none;
+      cursor: default;
+    }
+    .stage{
+      position:absolute;
+      left:50%;
+      top:50%;
+      transform-origin: 0 0;
+    }
+    .sheet{
+      width: 1024px;
+      height: 720px;
+      background:#fff;
+      border-radius:18px;
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(15,23,42,0.06);
+      overflow:hidden;
+      position:relative;
+    }
+    .sheetBg{
+      position:absolute;
+      inset:0;
+      width:100%;
+      height:100%;
+      object-fit:contain;
+      pointer-events:none;
+      opacity: 0.92;
+    }
+    .sheetGrid{
+      position:absolute;
+      inset:0;
+      pointer-events:none;
+      opacity: 0.6;
+    }
+    .sheetGrid line{ stroke: rgba(148,163,184,0.32); stroke-width:1; }
+    .sheetGrid .major{ stroke: rgba(148,163,184,0.55); }
+
+    /* ========= TOOLBAR ========= */
+    .toolbar{
+      position: fixed;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:12px;
+      padding:10px 14px;
+      border-radius: 18px;
+      background: var(--glass2);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--glassBorder);
+      box-shadow: var(--shadowSoft);
+      z-index: 80;
+      user-select:none;
+      -webkit-user-select:none;
+      touch-action:none;
+      cursor: grab;
+    }
+    .toolbar.locked{ cursor: default; }
+    .toolbar.dragging{ cursor: grabbing; }
+    .tbCenter{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:6px;
+    }
+    .tbTitle{
+      font-size:12px;
+      font-weight:1200;
+      text-transform:uppercase;
+      color: var(--sub);
+      letter-spacing:0.4px;
+    }
+    .tbTools{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:nowrap;
+    }
+    .tbDivider{
+      width:1px;
+      height:32px;
+      background: rgba(148,163,184,0.4);
+      border-radius: 999px;
+    }
+
+    .toolBtn{
+      --toolColor: var(--c-aoi);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      height:44px;
+      width:52px;
+      min-width:52px;
+      padding:0 10px;
+      border-radius: 999px;
+      border:2px solid var(--toolColor);
+      background:#fff;
+      cursor:pointer;
+      font-family:inherit;
+      appearance:none;
+      transition: transform 0.10s ease, box-shadow 0.10s ease, border-color 0.10s ease, background 0.10s ease;
+      white-space:nowrap;
+      color: var(--toolColor);
+    }
+    .toolBtn .toolText{
+      font-size:12px;
+      font-weight:1200;
+      letter-spacing:0.4px;
+    }
+    .toolBtn.expanded{
+      width:auto;
+      min-width:0;
+      padding:0 16px;
+    }
+    .toolBtn:hover{
+      transform: translateY(-1px);
+      box-shadow: 0 8px 14px rgba(2,6,23,0.10);
+    }
+    .toolBtn.active{
+      background: var(--toolColor);
+      border-color: var(--toolColor);
+      color:#fff;
+      box-shadow: 0 10px 16px rgba(2,6,23,0.12);
+    }
+    .toolBtn.aoi{ --toolColor: var(--c-aoi); }
+    .toolBtn.read{ --toolColor: var(--c-read); }
+    .toolBtn.src{ --toolColor: var(--c-src); }
+    .toolBtn.note{ --toolColor: var(--c-note); }
+
+    .lockIcon{
+      width:38px;
+      height:38px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      border-radius: 12px;
+      border:1px solid rgba(226,232,240,0.95);
+      background:#fff;
+      cursor:pointer;
+      user-select:none;
+      -webkit-user-select:none;
+    }
+    .lockIcon:hover{ background: rgba(241,245,249,0.85); }
+    .lockIcon svg{ width:18px; height:18px; }
+    .lockIcon.locked svg{ color:#F59E0B; }
+    .lockIcon.unlocked svg{ color: rgba(148,163,184,1); }
+
+    /* ========= NAV TOOLS (BOTTOM RIGHT) ========= */
+    .navTools{
+      position:absolute;
+      right:16px;
+      bottom:16px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      z-index: 70;
+      user-select:none;
+      -webkit-user-select:none;
+    }
+    .navCard{
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(226,232,240,0.85);
+      border-radius: 16px;
+      box-shadow: var(--shadowSoft);
+      padding: 10px;
+      width: 250px;
+    }
+    .navRow{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .zBtns{ display:flex; gap:8px; flex-wrap:wrap; }
+    .zBtn{
+      padding:10px 11px;
+      border-radius:12px;
+      border:1px solid rgba(226,232,240,0.95);
+      background:#fff;
+      cursor:pointer;
+      font-size:12px;
+      font-weight:1100;
+      user-select:none;
+    }
+    .zBtn:hover{ background:#F8FAFC; }
+    .zReadout{
+      font-size:12px;
+      font-weight:1100;
+      color: var(--navy);
+      padding: 10px 11px;
+      border-radius:12px;
+      border:1px solid rgba(226,232,240,0.95);
+      background: #fff;
+      min-width: 74px;
+      text-align:center;
+    }
+    .hint{
+      margin-top:8px;
+      font-size:11px;
+      color: var(--sub);
+      line-height:1.35;
+    }
+
+    /* ========= PROPERTIES PANEL ========= */
+    .panel{
+      background: var(--panel);
+      border-left: 1px solid var(--border);
+      display:flex;
+      flex-direction:column;
+      box-shadow: -10px 0 26px rgba(2,6,23,0.05);
+      position:relative;
+      min-width: 0;
+      height: 100vh;
+    }
+
+    .pHeader{
+      padding:14px 16px 16px;
+      background: linear-gradient(135deg, rgba(14,165,233,0.92), rgba(37,99,235,0.92));
+      color:#fff;
+      display:flex;
+      flex-direction:column;
+      align-items:stretch;
+      gap:12px;
+      min-width:0;
+    }
+    .hdrLine0{
+      font-size:11px;
+      font-weight:1100;
+      letter-spacing:0.55px;
+      text-transform:uppercase;
+      opacity:0.9;
+      margin-bottom:6px;
+    }
+    .hdrLine1{
+      font-size:24px;
+      font-weight:1200;
+      letter-spacing:0.2px;
+      line-height:1.15;
+      white-space:normal;
+      overflow-wrap:break-word;
+    }
+    .hdrLine2, .hdrLine3{
+      margin-top:6px;
+      font-size:12px;
+      font-weight:1000;
+      opacity:0.92;
+      line-height:1.35;
+      white-space:normal;
+      overflow-wrap:break-word;
+    }
+    .hdrActions{
+      display:flex;
+      align-items:flex-start;
+      gap:8px;
+      flex-wrap:wrap;
+      justify-content:flex-start;
+    }
+    .hdrBtn{
+      padding:8px 10px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,0.32);
+      background: rgba(255,255,255,0.16);
+      color:#fff;
+      font-size:12px;
+      font-weight:1200;
+      cursor:pointer;
+      white-space:nowrap;
+    }
+    .hdrSaveMeta{
+      font-size:11px;
+      color: rgba(255,255,255,0.85);
+      text-align:center;
+      min-height: 12px;
+    }
+    .pScroll{
+      flex:1;
+      overflow:auto;
+      -webkit-overflow-scrolling: touch;
+      padding:16px;
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+      min-width:0;
+    }
+    .card{
+      background:#fff;
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:12px;
+      box-shadow: var(--shadowSoft);
+      min-width:0;
+    }
+    .lbl{
+      display:block;
+      font-size:11px;
+      font-weight:1000;
+      text-transform:uppercase;
+      color: var(--sub);
+      letter-spacing:0.45px;
+      margin-bottom:8px;
+    }
+    .inp, select, textarea{
+      width:100%;
+      padding:12px 12px;
+      font-size:14px;
+      border:1px solid var(--border);
+      border-radius:14px;
+      background:#fff;
+      outline:none;
+      color:var(--text);
+    }
+    textarea{ min-height:84px; resize:vertical; }
+    .inp:focus, select:focus, textarea:focus{
+      border-color: var(--teal);
+      box-shadow: var(--ring);
+    }
+    .row{ display:flex; gap:10px; align-items:center; min-width:0; }
+    .row > *{ flex:1; min-width:0; }
+    .btn{
+      padding:12px 12px;
+      border-radius:14px;
+      border:1px solid var(--border);
+      background:#fff;
+      cursor:pointer;
+      font-size:13px;
+      font-weight:1100;
+      user-select:none;
+      transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.08s ease;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+    }
+    .btn:hover{ transform: translateY(-1px); box-shadow: 0 10px 16px rgba(2,6,23,0.08); background:#F8FAFC; }
+    .btnPrimary{
+      border-color: rgba(11,167,165,0.35);
+      color: var(--teal);
+      background: rgba(11,167,165,0.06);
+    }
+    .btnDanger{
+      border-color: rgba(220,38,38,0.35);
+      color: #B91C1C;
+      background: rgba(220,38,38,0.06);
+    }
+    .btnFull{ width:100%; }
+    .tiny{ color: var(--sub); font-size:12px; line-height:1.35; }
+    .hr{ height:1px; background: rgba(226,232,240,0.95); margin: 10px 0; }
+
+    /* Items */
+    .groupHeader{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      font-size:12px;
+      font-weight:1200;
+      text-transform:uppercase;
+      color: var(--sub);
+      letter-spacing:0.45px;
+      margin: 8px 0 10px 0;
+      padding:8px 10px;
+      border-radius:12px;
+      border:1px solid rgba(226,232,240,0.95);
+      background:#F8FAFC;
+      cursor:pointer;
+    }
+    .groupHeader .groupTitle{ display:flex; align-items:center; gap:8px; }
+    .groupHeader .groupCount{
+      font-size:11px;
+      font-weight:1200;
+      padding:4px 8px;
+      border-radius:999px;
+      border:1px solid rgba(226,232,240,0.95);
+      background:#fff;
+      color:#0B1220;
+      text-transform:none;
+    }
+    .groupHeader .groupChevron{
+      width:20px;
+      height:20px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      border-radius:999px;
+      background:rgba(255,255,255,0.75);
+    }
+    .groupHeader.aoi{ border-color: rgba(147,51,234,0.3); background: rgba(147,51,234,0.08); color:#6B21A8; }
+    .groupHeader.read{ border-color: rgba(37,99,235,0.3); background: rgba(37,99,235,0.08); color:#1E40AF; }
+    .groupHeader.src{ border-color: rgba(22,163,74,0.3); background: rgba(22,163,74,0.08); color:#166534; }
+    .groupHeader.note{ border-color: rgba(17,24,39,0.2); background: rgba(17,24,39,0.06); color:#111827; }
+
+    .itemRow{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:10px;
+      padding: 12px 12px;
+      border-radius: 16px;
+      border:1px solid var(--border);
+      background:#fff;
+      cursor:pointer;
+      user-select:none;
+      border-left-width:5px;
+      transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.08s ease, border-color 0.08s ease;
+    }
+    .itemRow:hover{ transform: translateY(-1px); box-shadow: 0 10px 16px rgba(2,6,23,0.08); background:#F8FAFC; }
+    .itemRow.selected{
+      border-color: rgba(11,167,165,0.55);
+      box-shadow: var(--ring);
+      background:#F1F5F9;
+    }
+    .itemInfo{ min-width:0; flex:1; }
+    .itemInfo b{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      font-size:13px;
+      font-weight:1200;
+      white-space:normal;
+      overflow-wrap:anywhere;
+      line-height:1.25;
+      color:#0B1220;
+    }
+    .itemInfo span{
+      display:block;
+      font-size:12px;
+      color: var(--sub);
+      margin-top:4px;
+      white-space:normal;
+      overflow-wrap:anywhere;
+      line-height:1.25;
+    }
+
+    .badge{
+      font-size:11px;
+      font-weight:1200;
+      padding:4px 8px;
+      border-radius:999px;
+      border:1px solid rgba(148,163,184,0.45);
+      background: rgba(241,245,249,0.9);
+      color:#0B1220;
+      white-space:nowrap;
+      flex:0 0 auto;
+    }
+
+    /* Markers */
+    .marker{
+      position:absolute;
+      transform: translate(-50%,-50%);
+      width: 34px;
+      height: 34px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color:#fff;
+      font-weight:1200;
+      font-size:12px;
+      border:2px solid rgba(255,255,255,0.92);
+      box-shadow: 0 10px 18px rgba(2,6,23,0.22);
+      user-select:none;
+    }
+    .marker.aoi{ background: var(--c-aoi); border-radius: 14px; }
+    .marker.read{ background: var(--c-read); border-radius: 999px; }
+    .marker.src{ background: var(--c-src); border-radius: 10px; }
+    .marker.note{ background: var(--c-note); border-radius: 999px; }
+    .marker.selected{
+      outline: 3px solid rgba(11,167,165,0.45);
+      outline-offset: 2px;
+    }
+
+    /* Responsive */
+    @media (max-width: 980px){
+      .app{ grid-template-columns: 1fr minmax(300px, 360px); }
+    }
+    @media (max-width: 820px){
+      .app{ grid-template-columns: 1fr; }
+      .toolbar{
+        max-width: calc(100% - 24px);
+        left: 50% !important;
+        top: 10px !important;
+        transform: translateX(-50%);
+        padding: 8px 10px;
+      }
+      .tbTools{
+        max-width: 100%;
+        overflow-x: auto;
+        padding-bottom: 4px;
+        scroll-snap-type: x mandatory;
+      }
+      .toolBtn{ scroll-snap-align: center; }
+      .navTools{ right:12px; bottom:90px; }
+      .navCard{ width: 210px; }
+
+      .panel{
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: min(100%, 420px);
+        transform: translateX(100%);
+        transition: transform 0.2s ease;
+        z-index: 90;
+      }
+      .panel.mobileOpen{ transform: translateX(0); }
+      .panelOverlay{
+        position: fixed;
+        inset: 0;
+        background: rgba(15,23,42,0.35);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+        z-index: 85;
+      }
+      .panelOverlay.show{
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .mobileDock{
+        position: fixed;
+        left: 12px;
+        right: 12px;
+        bottom: 16px;
+        display: flex;
+        gap: 10px;
+        z-index: 80;
+      }
+      .mobileDock .btn{ flex: 1 1 0; }
+    }
+
+    .ico{ width:18px; height:18px; color: currentColor; }
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useMemo, useRef, useEffect, useCallback } = React;
+
+    const uid = () => Math.random().toString(36).slice(2, 10);
+    const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
+
+    function readFileAsDataUrl(file){
+      if(!file) return Promise.resolve(null);
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+    }
+    async function fileToObj(file){
+      if(!file) return null;
+      const dataUrl = await readFileAsDataUrl(file);
+      return { name: file.name, url: dataUrl, dataUrl };
+    }
+    function reviveFileObj(obj){
+      if(!obj) return null;
+      const dataUrl = obj.dataUrl || obj.url;
+      if(!dataUrl) return null;
+      return { name: obj.name || "image", url: dataUrl, dataUrl };
+    }
+
+    const Icon = ({name, className=""}) => {
+      const common = { className: `ico ${className}`, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:"2", strokeLinecap:"round", strokeLinejoin:"round" };
+      if(name === "lock"){
+        return (<svg {...common}><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>);
+      }
+      if(name === "unlock"){
+        return (<svg {...common}><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 7-2"/></svg>);
+      }
+      if(name === "chevDown"){
+        return (<svg {...common}><path d="M6 9l6 6 6-6"/></svg>);
+      }
+      if(name === "chevUp"){
+        return (<svg {...common}><path d="M6 15l6-6 6 6"/></svg>);
+      }
+      if(name === "pencil"){
+        return (<svg {...common}><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>);
+      }
+      return null;
+    };
+
+    const STORAGE_KEY = "titanmoisture.v0.1.state";
+
+    const ROOMS_DEFAULT = ["Living", "Kitchen", "Primary Bed", "Bath 1", "Hall", "Attic", "Garage", "Other"];
+    const ELEVATIONS = ["Ceiling", "Wall", "Floor", "Window", "Door", "Trim", "Cabinet", "Other"];
+    const INTERIOR_CONDITIONS = [
+      "Water staining",
+      "Paint bubbling / peeling",
+      "Drywall softening",
+      "Swollen wood fibers",
+      "Baseboard separation",
+      "Efflorescence",
+      "Corrosion/oxidation",
+      "Microbial-like growth",
+      "Musty odor noted",
+      "Other"
+    ];
+    const SUSPECTED_SOURCES = [
+      "Roof / flashing pathway",
+      "Window / door opening",
+      "Plumbing supply line",
+      "Plumbing drain / trap",
+      "HVAC condensate",
+      "Water heater pan/line",
+      "Appliance line (ice maker, washer)",
+      "Exterior cladding / weep / flashing",
+      "Condensation / humidity",
+      "Unknown / to be determined"
+    ];
+    const INSTRUMENTS = ["Pin meter", "Pinless meter", "IR camera", "Hygrometer", "Other/Unknown"];
+
+    function App(){
+      const viewportRef = useRef(null);
+      const stageRef = useRef(null);
+      const sheetRef = useRef(null);
+      const toolbarRef = useRef(null);
+
+      const [tool, setTool] = useState("aoi"); // aoi | read | src | note | pan
+      const [selectedId, setSelectedId] = useState(null);
+
+      const [toolbarPos, setToolbarPos] = useState({ x: 20, y: 80 });
+      const [toolbarDragging, setToolbarDragging] = useState(false);
+      const [toolbarLocked, setToolbarLocked] = useState(false);
+      const toolbarDragRef = useRef(null);
+
+      const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
+      const [lastSavedAt, setLastSavedAt] = useState(null);
+
+      // Header / project meta
+      const [hdrCollapsed, setHdrCollapsed] = useState(true);
+      const [hdrEditOpen, setHdrEditOpen] = useState(false);
+
+      const [projectName, setProjectName] = useState("Enter Name");
+      const [inspectionDate, setInspectionDate] = useState("");
+      const [propertyCity, setPropertyCity] = useState("Houston, Texas");
+      const [eventContext, setEventContext] = useState("Moisture Intrusion Assessment");
+      const [scopeNote, setScopeNote] = useState("Interior observations and moisture-related conditions.");
+
+      // background (optional)
+      const [bg, setBg] = useState(null); // {name,url,dataUrl}
+
+      // items
+      const counts = useRef({ aoi:1, read:1, src:1, note:1 });
+      const [items, setItems] = useState([]);
+
+      // view (pan/zoom + pinch)
+      const [view, setView] = useState({ scale: 1.0, tx: 0, ty: 0 });
+      const [drag, setDrag] = useState(null); // {mode:'pan'|'move', id, start:{x,y}, origin:{tx,ty} or originPos:{x,y}}
+
+      const isMobile = window.innerWidth <= 820;
+
+      const activeItem = items.find(i => i.id === selectedId) || null;
+
+      // ===== persistence =====
+      const serializeItem = (it) => ({
+        ...it,
+        data: {
+          ...it.data,
+          photo: it.data.photo ? { name: it.data.photo.name, dataUrl: it.data.photo.dataUrl || it.data.photo.url } : null
+        }
+      });
+
+      const buildState = useCallback(() => ({
+        projectName, inspectionDate, propertyCity, eventContext, scopeNote,
+        hdrCollapsed,
+        bg: bg ? { name: bg.name, dataUrl: bg.dataUrl || bg.url } : null,
+        items: items.map(serializeItem),
+        counts: counts.current,
+        view
+      }), [projectName, inspectionDate, propertyCity, eventContext, scopeNote, hdrCollapsed, bg, items, view]);
+
+      const saveState = useCallback((source="manual") => {
+        try{
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(buildState()));
+          setLastSavedAt({ source, time: new Date().toLocaleTimeString() });
+        }catch(e){
+          console.warn("Save failed", e);
+        }
+      }, [buildState]);
+
+      useEffect(() => {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if(!raw) return;
+        try{
+          const s = JSON.parse(raw);
+          setProjectName(s.projectName || "Enter Name");
+          setInspectionDate(s.inspectionDate || "");
+          setPropertyCity(s.propertyCity || "Houston, Texas");
+          setEventContext(s.eventContext || "Moisture Intrusion Assessment");
+          setScopeNote(s.scopeNote || "Interior observations and moisture-related conditions.");
+          setHdrCollapsed(s.hdrCollapsed ?? true);
+          setView(s.view || { scale:1, tx:0, ty:0 });
+          if(s.bg?.dataUrl){
+            setBg({ name: s.bg.name || "Background", url: s.bg.dataUrl, dataUrl: s.bg.dataUrl });
+          }
+          if(Array.isArray(s.items)){
+            const revived = s.items.map(it => ({
+              ...it,
+              data: {
+                ...it.data,
+                photo: it.data?.photo?.dataUrl ? reviveFileObj(it.data.photo) : null
+              }
+            }));
+            setItems(revived);
+          }
+          if(s.counts) counts.current = s.counts;
+        }catch(e){
+          console.warn("Restore failed", e);
+        }
+      }, []);
+
+      useEffect(() => {
+        const id = setInterval(() => saveState("auto"), 5*60*1000);
+        return () => clearInterval(id);
+      }, [saveState]);
+
+      // ===== toolbar drag =====
+      const clampToolbarPos = useCallback((pos) => {
+        const zone = document.querySelector(".canvasZone")?.getBoundingClientRect();
+        const tb = toolbarRef.current?.getBoundingClientRect();
+        if(!zone || !tb) return pos;
+        const pad = 10;
+        const minX = zone.left + pad;
+        const minY = zone.top + pad;
+        const maxX = zone.right - tb.width - pad;
+        const maxY = zone.bottom - tb.height - pad;
+        return { x: clamp(pos.x, minX, Math.max(minX, maxX)), y: clamp(pos.y, minY, Math.max(minY, maxY)) };
+      }, []);
+
+      useEffect(() => { setToolbarPos(p => clampToolbarPos(p)); }, [clampToolbarPos]);
+
+      const onToolbarDown = (e) => {
+        if(e.button !== 0) return;
+        if(toolbarLocked) return;
+        if(e.target.closest("button") || e.target.closest(".lockIcon")) return;
+        e.preventDefault();
+        toolbarDragRef.current = { sx:e.clientX, sy:e.clientY, ox:toolbarPos.x, oy:toolbarPos.y };
+        setToolbarDragging(true);
+        try{ e.currentTarget.setPointerCapture(e.pointerId); }catch{}
+      };
+      const onToolbarMove = (e) => {
+        if(!toolbarDragRef.current) return;
+        const { sx, sy, ox, oy } = toolbarDragRef.current;
+        setToolbarPos(clampToolbarPos({ x: ox + (e.clientX - sx), y: oy + (e.clientY - sy) }));
+      };
+      const onToolbarUp = (e) => {
+        if(!toolbarDragRef.current) return;
+        toolbarDragRef.current = null;
+        setToolbarDragging(false);
+        try{ e.currentTarget.releasePointerCapture(e.pointerId); }catch{}
+      };
+
+      // ===== view transforms =====
+      const setScaleAnchored = (nextScale, anchorClient) => {
+        const v = viewportRef.current?.getBoundingClientRect();
+        if(!v) return;
+        const scale = clamp(nextScale, 0.40, 3.0);
+        if(!anchorClient){
+          setView(prev => ({ ...prev, scale }));
+          return;
+        }
+        setView(prev => {
+          const ax = anchorClient.x - v.left;
+          const ay = anchorClient.y - v.top;
+          const s0 = prev.scale;
+          const s1 = scale;
+          const dx = ax - v.width/2 - prev.tx;
+          const dy = ay - v.height/2 - prev.ty;
+          return {
+            scale: s1,
+            tx: prev.tx + dx * (1 - s1/s0),
+            ty: prev.ty + dy * (1 - s1/s0),
+          };
+        });
+      };
+      const zoomIn = () => setScaleAnchored(view.scale * 1.15);
+      const zoomOut = () => setScaleAnchored(view.scale / 1.15);
+      const zoomReset = () => setView({ scale:1.0, tx:0, ty:0 });
+
+      // ===== canvas interactions =====
+      const clientToSheet = (clientX, clientY) => {
+        const v = viewportRef.current?.getBoundingClientRect();
+        if(!v) return null;
+        const sheetW = 1024, sheetH = 720;
+
+        // stage is centered at viewport center + view tx/ty, then scaled, with sheet anchored at (0,0) stage origin.
+        const x = (clientX - v.left - v.width/2 - view.tx) / view.scale + sheetW/2;
+        const y = (clientY - v.top  - v.height/2 - view.ty) / view.scale + sheetH/2;
+
+        return { x: clamp(x/sheetW, 0, 1), y: clamp(y/sheetH, 0, 1) };
+      };
+
+      const createItem = (type, pos) => {
+        const id = uid();
+        const n = counts.current[type]++;
+
+        const base = {
+          id,
+          type,
+          name: "",
+          x: pos.x,
+          y: pos.y,
+          data: {
+            room: "Living",
+            elevation: "Wall",
+            condition: "Water staining",
+            extent: "",
+            instrument: "Pin meter",
+            reading: "",
+            units: "WME",
+            suspectedSource: "Unknown / to be determined",
+            confidence: 2, // 1-5
+            notes: "",
+            photo: null
+          }
+        };
+
+        if(type === "aoi"){
+          base.name = `AOI-${n}`;
+          base.data = { ...base.data, notes: "Area of interest. Describe observed condition(s), moisture pattern, and any nearby features." };
+        }
+        if(type === "read"){
+          base.name = `MR-${n}`;
+          base.data = { ...base.data, condition: "Water staining", notes: "Document the reading location, substrate, and instrument type/model if needed." };
+        }
+        if(type === "src"){
+          base.name = `SRC-${n}`;
+          base.data = { ...base.data, suspectedSource: "Roof / flashing pathway", notes: "Describe suspected pathway and rationale. Identify needed follow-up (e.g., hose test, attic review)." };
+        }
+        if(type === "note"){
+          base.name = `NOTE-${n}`;
+          base.data = { ...base.data, elevation:"Other", condition:"Other", notes: "General note (odors, occupant statements, recent repairs, environmental conditions, etc.)." };
+        }
+        return base;
+      };
+
+      const markerColorClass = (t) => (t === "aoi" ? "aoi" : t === "read" ? "read" : t === "src" ? "src" : "note");
+
+      const addAtClick = (e) => {
+        if(tool === "pan") return;
+        const hitMarker = e.target.closest("[data-marker-id]");
+        if(hitMarker) return;
+        const p = clientToSheet(e.clientX, e.clientY);
+        if(!p) return;
+        const it = createItem(tool, p);
+        setItems(prev => [...prev, it]);
+        setSelectedId(it.id);
+        if(isMobile) setMobilePanelOpen(true);
+      };
+
+      const onPointerDown = (e) => {
+        const markerEl = e.target.closest("[data-marker-id]");
+        if(markerEl){
+          const id = markerEl.getAttribute("data-marker-id");
+          setSelectedId(id);
+          if(tool === "pan") {
+            // allow pan even if pressing marker? keep pan on viewport background only
+          } else {
+            // drag marker
+            e.preventDefault();
+            setDrag({ mode:"move", id, sx:e.clientX, sy:e.clientY });
+            try{ e.currentTarget.setPointerCapture(e.pointerId); }catch{}
+          }
+          return;
+        }
+
+        if(tool === "pan"){
+          e.preventDefault();
+          setDrag({ mode:"pan", sx:e.clientX, sy:e.clientY, ox:view.tx, oy:view.ty });
+          try{ e.currentTarget.setPointerCapture(e.pointerId); }catch{}
+        }
+      };
+
+      const onPointerMove = (e) => {
+        if(!drag) return;
+        if(drag.mode === "pan"){
+          setView(prev => ({ ...prev, tx: drag.ox + (e.clientX - drag.sx), ty: drag.oy + (e.clientY - drag.sy) }));
+        }
+        if(drag.mode === "move"){
+          const v = viewportRef.current?.getBoundingClientRect();
+          if(!v) return;
+          const sheetW = 1024, sheetH = 720;
+
+          // compute delta in sheet space
+          const dxClient = e.clientX - drag.sx;
+          const dyClient = e.clientY - drag.sy;
+          const dxSheet = dxClient / view.scale;
+          const dySheet = dyClient / view.scale;
+
+          setItems(prev => prev.map(it => {
+            if(it.id !== drag.id) return it;
+            const xAbs = it.x * sheetW + dxSheet;
+            const yAbs = it.y * sheetH + dySheet;
+            return { ...it, x: clamp(xAbs/sheetW, 0, 1), y: clamp(yAbs/sheetH, 0, 1) };
+          }));
+          // update drag start so movement feels stable
+          setDrag(d => d ? ({ ...d, sx:e.clientX, sy:e.clientY }) : d);
+        }
+      };
+
+      const onPointerUp = (e) => {
+        if(!drag) return;
+        setDrag(null);
+        try{ e.currentTarget.releasePointerCapture(e.pointerId); }catch{}
+      };
+
+      const onWheel = (e) => {
+        e.preventDefault();
+        const isZoom = e.ctrlKey || e.metaKey;
+        if(isZoom){
+          const delta = -e.deltaY;
+          const factor = delta > 0 ? 1.08 : 1/1.08;
+          setScaleAnchored(view.scale * factor, { x: e.clientX, y: e.clientY });
+        } else {
+          setView(prev => ({ ...prev, tx: prev.tx - e.deltaX, ty: prev.ty - e.deltaY }));
+        }
+      };
+
+      const group = useMemo(() => {
+        const g = { aoi: [], read: [], src: [], note: [] };
+        items.forEach(it => g[it.type]?.push(it));
+        return g;
+      }, [items]);
+
+      const [groupOpen, setGroupOpen] = useState({ aoi:true, read:true, src:true, note:true });
+
+      const deleteActive = () => {
+        if(!selectedId) return;
+        setItems(prev => prev.filter(i => i.id !== selectedId));
+        setSelectedId(null);
+      };
+
+      const clearAll = () => {
+        if(!confirm("Clear all TitanMoisture notes? (This will also clear saved state)")) return;
+        setItems([]);
+        setSelectedId(null);
+        setBg(null);
+        counts.current = { aoi:1, read:1, src:1, note:1 };
+        localStorage.removeItem(STORAGE_KEY);
+        setLastSavedAt(null);
+      };
+
+      const setActivePhoto = async (file) => {
+        if(!activeItem) return;
+        const obj = await fileToObj(file);
+        setItems(prev => prev.map(i => i.id === activeItem.id ? ({ ...i, data: { ...i.data, photo: obj } }) : i));
+      };
+
+      const updateActive = (k, v) => {
+        if(!activeItem) return;
+        setItems(prev => prev.map(i => i.id === activeItem.id ? ({ ...i, data: { ...i.data, [k]: v } }) : i));
+      };
+
+      const exportJson = () => {
+        const payload = buildState();
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type:"application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = (projectName || "TitanMoisture").replace(/[^\w\-]+/g, "_") + "_export.json";
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+
+      // simple grid overlay lines
+      const Grid = () => {
+        const lines = [];
+        for(let i=1;i<12;i++){
+          const x = (i/12)*1024;
+          lines.push(<line key={"vx"+i} x1={x} y1={0} x2={x} y2={720} className={i%3===0 ? "major" : ""} />);
+        }
+        for(let j=1;j<8;j++){
+          const y = (j/8)*720;
+          lines.push(<line key={"hy"+j} x1={0} y1={y} x2={1024} y2={y} className={j%2===0 ? "major" : ""} />);
+        }
+        return (
+          <svg className="sheetGrid" width="1024" height="720" viewBox="0 0 1024 720">
+            {lines}
+          </svg>
+        );
+      };
+
+      // header summary
+      const metaLine2 = `${eventContext}${inspectionDate ? " • " + inspectionDate : ""}`;
+      const metaLine3 = `${propertyCity}`;
+
+      return (
+        <div className="app">
+          {/* canvas */}
+          <div className="canvasZone">
+            <div
+              ref={toolbarRef}
+              className={"toolbar" + (toolbarLocked ? " locked" : "") + (toolbarDragging ? " dragging" : "")}
+              style={{ left: toolbarPos.x, top: toolbarPos.y }}
+              onPointerDown={onToolbarDown}
+              onPointerMove={onToolbarMove}
+              onPointerUp={onToolbarUp}
+            >
+              <div className="tbCenter">
+                <div className="tbTitle">TitanMoisture • Tools</div>
+                <div className="tbTools">
+                  <button className={"toolBtn aoi expanded" + (tool==="aoi" ? " active" : "")} onClick={() => setTool("aoi")}><span className="toolText">AOI</span></button>
+                  <button className={"toolBtn read expanded" + (tool==="read" ? " active" : "")} onClick={() => setTool("read")}><span className="toolText">MR</span></button>
+                  <button className={"toolBtn src expanded" + (tool==="src" ? " active" : "")} onClick={() => setTool("src")}><span className="toolText">SRC</span></button>
+                  <button className={"toolBtn note expanded" + (tool==="note" ? " active" : "")} onClick={() => setTool("note")}><span className="toolText">NOTE</span></button>
+                  <div className="tbDivider"></div>
+                  <button className={"toolBtn note expanded" + (tool==="pan" ? " active" : "")} style={{"--toolColor":"var(--navy)"}}
+                          onClick={() => setTool("pan")}><span className="toolText">PAN</span></button>
+                  <div className={"lockIcon " + (toolbarLocked ? "locked" : "unlocked")} title={toolbarLocked ? "Locked" : "Unlocked"}
+                       onClick={() => setToolbarLocked(v => !v)}>
+                    {toolbarLocked ? <Icon name="lock" /> : <Icon name="unlock" />}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="navTools">
+              <div className="navCard">
+                <div className="navRow">
+                  <div className="zBtns">
+                    <button className="zBtn" onClick={zoomOut}>–</button>
+                    <button className="zBtn" onClick={zoomIn}>+</button>
+                    <button className="zBtn" onClick={zoomReset}>Reset</button>
+                  </div>
+                  <div className="zReadout">{Math.round(view.scale*100)}%</div>
+                </div>
+                <div className="hint">
+                  Tap to place: <b>AOI</b> (purple), <b>MR</b> readings (blue), <b>SRC</b> suspected source (green), <b>NOTE</b> (charcoal). Use <b>PAN</b> to move the sheet.
+                </div>
+              </div>
+            </div>
+
+            <div
+              ref={viewportRef}
+              className="viewport"
+              onClick={addAtClick}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onWheel={onWheel}
+            >
+              <div
+                ref={stageRef}
+                className="stage"
+                style={{
+                  transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.scale}) translate(-512px, -360px)`
+                }}
+              >
+                <div className="sheet" ref={sheetRef}>
+                  {bg?.url ? <img className="sheetBg" src={bg.url} alt="background" /> : null}
+                  <Grid />
+
+                  {items.map(it => (
+                    <div
+                      key={it.id}
+                      data-marker-id={it.id}
+                      className={"marker " + markerColorClass(it.type) + (it.id === selectedId ? " selected" : "")}
+                      style={{ left: `${it.x*100}%`, top: `${it.y*100}%` }}
+                      title={it.name}
+                      onClick={(e) => { e.stopPropagation(); setSelectedId(it.id); if(isMobile) setMobilePanelOpen(true); }}
+                    >
+                      {it.name.split("-")[0]}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* mobile controls */}
+            {isMobile && (
+              <>
+                <div className={"panelOverlay" + (mobilePanelOpen ? " show" : "")} onClick={() => setMobilePanelOpen(false)}></div>
+                <div className="mobileDock">
+                  <button className="btn btnPrimary" onClick={() => setMobilePanelOpen(true)}>Properties</button>
+                  <button className="btn" onClick={() => setTool("pan")}>Pan</button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* sidebar */}
+          <div className={"panel" + (isMobile && mobilePanelOpen ? " mobileOpen" : "")}>
+            <div className="pHeader">
+              <div>
+                <div className="hdrLine0">TitanMoisture • Version 0.1</div>
+                <div className="hdrLine1">{projectName}</div>
+                {!hdrCollapsed && (
+                  <>
+                    <div className="hdrLine2">{metaLine2}</div>
+                    <div className="hdrLine3">{metaLine3}</div>
+                  </>
+                )}
+              </div>
+
+              <div className="hdrActions">
+                {isMobile && <button className="hdrBtn" onClick={() => setMobilePanelOpen(false)}>Close</button>}
+                <button className="hdrBtn" onClick={() => setHdrCollapsed(v => !v)}>
+                  {hdrCollapsed ? "Expand" : "Collapse"}
+                </button>
+                <button className="hdrBtn" onClick={() => setHdrEditOpen(v => !v)}>
+                  <span style={{display:"inline-flex", alignItems:"center", gap:8}}><Icon name="pencil" /> Edit</span>
+                </button>
+                <button className="hdrBtn" onClick={() => saveState("manual")}>Save</button>
+                <button className="hdrBtn" onClick={exportJson}>Export JSON</button>
+                <button className="hdrBtn" onClick={clearAll}>Reset</button>
+                <div className="hdrSaveMeta">
+                  {lastSavedAt ? `${lastSavedAt.source === "auto" ? "Auto saved" : "Last saved"} ${lastSavedAt.time}` : "Not saved yet"}
+                </div>
+              </div>
+            </div>
+
+            <div className="pScroll">
+              {hdrEditOpen && (
+                <div className="card">
+                  <div className="lbl">Project header</div>
+                  <label className="lbl" style={{marginTop:10}}>Project / Residence name</label>
+                  <input className="inp" value={projectName} onChange={(e)=>setProjectName(e.target.value)} />
+
+                  <div className="row" style={{marginTop:10}}>
+                    <div>
+                      <label className="lbl">Inspection date</label>
+                      <input className="inp" placeholder="MM/DD/YYYY" value={inspectionDate} onChange={(e)=>setInspectionDate(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="lbl">Location</label>
+                      <input className="inp" value={propertyCity} onChange={(e)=>setPropertyCity(e.target.value)} />
+                    </div>
+                  </div>
+
+                  <label className="lbl" style={{marginTop:10}}>Context</label>
+                  <input className="inp" value={eventContext} onChange={(e)=>setEventContext(e.target.value)} />
+
+                  <label className="lbl" style={{marginTop:10}}>Scope note</label>
+                  <textarea className="inp" value={scopeNote} onChange={(e)=>setScopeNote(e.target.value)} />
+
+                  <div className="hr"></div>
+                  <div className="lbl">Optional background</div>
+                  <div className="tiny">Upload a photo or quick floor plan screenshot for reference (not required).</div>
+                  <div style={{marginTop:10}}>
+                    <label className="btn btnPrimary" style={{display:"inline-flex", cursor:"pointer"}}>
+                      Upload Background
+                      <input type="file" accept="image/*" style={{display:"none"}}
+                        onChange={async (e) => {
+                          const f = e.target.files?.[0];
+                          if(!f) return;
+                          const obj = await fileToObj(f);
+                          setBg(obj);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                    {bg?.name && <div className="tiny" style={{marginTop:8}}>Loaded: <b>{bg.name}</b></div>}
+                    {bg && (
+                      <div style={{marginTop:10}}>
+                        <button className="btn btnDanger" onClick={() => setBg(null)}>Remove Background</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Items list */}
+              <div className="card">
+                <div className="lbl">Items</div>
+                <div className="tiny">Select an item below, or place new markers on the sheet using the toolbar.</div>
+
+                <div style={{marginTop:12}}>
+                  <div className={"groupHeader aoi"} onClick={() => setGroupOpen(s => ({...s, aoi: !s.aoi}))}>
+                    <div className="groupTitle">
+                      AOI (Areas of Interest)
+                      <span className="groupCount">{group.aoi.length}</span>
+                    </div>
+                    <div className="groupChevron"><Icon name={groupOpen.aoi ? "chevUp" : "chevDown"} /></div>
+                  </div>
+                  {groupOpen.aoi && group.aoi.map(it => (
+                    <div key={it.id} className={"itemRow" + (it.id===selectedId ? " selected" : "")} style={{borderLeftColor:"var(--c-aoi)"}}
+                         onClick={() => { setSelectedId(it.id); if(isMobile) setMobilePanelOpen(true); }}>
+                      <div className="itemInfo">
+                        <b>{it.name}</b>
+                        <span>{it.data.room} • {it.data.elevation} • {it.data.condition}</span>
+                      </div>
+                      <span className="badge">AOI</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{marginTop:12}}>
+                  <div className={"groupHeader read"} onClick={() => setGroupOpen(s => ({...s, read: !s.read}))}>
+                    <div className="groupTitle">
+                      MR (Moisture Readings)
+                      <span className="groupCount">{group.read.length}</span>
+                    </div>
+                    <div className="groupChevron"><Icon name={groupOpen.read ? "chevUp" : "chevDown"} /></div>
+                  </div>
+                  {groupOpen.read && group.read.map(it => (
+                    <div key={it.id} className={"itemRow" + (it.id===selectedId ? " selected" : "")} style={{borderLeftColor:"var(--c-read)"}}
+                         onClick={() => { setSelectedId(it.id); if(isMobile) setMobilePanelOpen(true); }}>
+                      <div className="itemInfo">
+                        <b>{it.name}</b>
+                        <span>{it.data.room} • {it.data.reading ? (it.data.reading + " " + it.data.units) : "Reading not entered"}</span>
+                      </div>
+                      <span className="badge">MR</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{marginTop:12}}>
+                  <div className={"groupHeader src"} onClick={() => setGroupOpen(s => ({...s, src: !s.src}))}>
+                    <div className="groupTitle">
+                      SRC (Suspected Source / Pathway)
+                      <span className="groupCount">{group.src.length}</span>
+                    </div>
+                    <div className="groupChevron"><Icon name={groupOpen.src ? "chevUp" : "chevDown"} /></div>
+                  </div>
+                  {groupOpen.src && group.src.map(it => (
+                    <div key={it.id} className={"itemRow" + (it.id===selectedId ? " selected" : "")} style={{borderLeftColor:"var(--c-src)"}}
+                         onClick={() => { setSelectedId(it.id); if(isMobile) setMobilePanelOpen(true); }}>
+                      <div className="itemInfo">
+                        <b>{it.name}</b>
+                        <span>{it.data.room} • {it.data.suspectedSource}</span>
+                      </div>
+                      <span className="badge">SRC</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{marginTop:12}}>
+                  <div className={"groupHeader note"} onClick={() => setGroupOpen(s => ({...s, note: !s.note}))}>
+                    <div className="groupTitle">
+                      Notes
+                      <span className="groupCount">{group.note.length}</span>
+                    </div>
+                    <div className="groupChevron"><Icon name={groupOpen.note ? "chevUp" : "chevDown"} /></div>
+                  </div>
+                  {groupOpen.note && group.note.map(it => (
+                    <div key={it.id} className={"itemRow" + (it.id===selectedId ? " selected" : "")} style={{borderLeftColor:"var(--c-note)"}}
+                         onClick={() => { setSelectedId(it.id); if(isMobile) setMobilePanelOpen(true); }}>
+                      <div className="itemInfo">
+                        <b>{it.name}</b>
+                        <span>{it.data.notes?.slice(0, 60) || "—"}{(it.data.notes||"").length>60 ? "…" : ""}</span>
+                      </div>
+                      <span className="badge">NOTE</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Properties for selected */}
+              <div className="card">
+                <div className="lbl">Selected item</div>
+                {!activeItem ? (
+                  <div className="tiny">Select a marker (or add one) to edit details.</div>
+                ) : (
+                  <>
+                    <div className="row">
+                      <div>
+                        <label className="lbl">Label</label>
+                        <input className="inp" value={activeItem.name} onChange={(e)=>{
+                          const v = e.target.value;
+                          setItems(prev => prev.map(i => i.id===activeItem.id ? ({...i, name:v}) : i));
+                        }} />
+                      </div>
+                      <div>
+                        <label className="lbl">Room</label>
+                        <select className="inp" value={activeItem.data.room} onChange={(e)=>updateActive("room", e.target.value)}>
+                          {ROOMS_DEFAULT.map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="row" style={{marginTop:10}}>
+                      <div>
+                        <label className="lbl">Elevation / component</label>
+                        <select className="inp" value={activeItem.data.elevation} onChange={(e)=>updateActive("elevation", e.target.value)}>
+                          {ELEVATIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="lbl">Condition</label>
+                        <select className="inp" value={activeItem.data.condition} onChange={(e)=>updateActive("condition", e.target.value)}>
+                          {INTERIOR_CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="row" style={{marginTop:10}}>
+                      <div>
+                        <label className="lbl">Moisture reading</label>
+                        <input className="inp" placeholder="e.g., 18" value={activeItem.data.reading} onChange={(e)=>updateActive("reading", e.target.value)} />
+                      </div>
+                      <div>
+                        <label className="lbl">Units</label>
+                        <select className="inp" value={activeItem.data.units} onChange={(e)=>updateActive("units", e.target.value)}>
+                          <option value="WME">WME</option>
+                          <option value="%">%</option>
+                          <option value="RH">RH</option>
+                          <option value="Temp">Temp</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="row" style={{marginTop:10}}>
+                      <div>
+                        <label className="lbl">Instrument</label>
+                        <select className="inp" value={activeItem.data.instrument} onChange={(e)=>updateActive("instrument", e.target.value)}>
+                          {INSTRUMENTS.map(x => <option key={x} value={x}>{x}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="lbl">Approx. extent</label>
+                        <input className="inp" placeholder='e.g., "2 ft x 3 ft area" / "localized"' value={activeItem.data.extent} onChange={(e)=>updateActive("extent", e.target.value)} />
+                      </div>
+                    </div>
+
+                    <label className="lbl" style={{marginTop:10}}>Suspected source / pathway</label>
+                    <select className="inp" value={activeItem.data.suspectedSource} onChange={(e)=>updateActive("suspectedSource", e.target.value)}>
+                      {SUSPECTED_SOURCES.map(x => <option key={x} value={x}>{x}</option>)}
+                    </select>
+
+                    <label className="lbl" style={{marginTop:10}}>Confidence (1–5)</label>
+                    <input type="range" min="1" max="5" value={activeItem.data.confidence}
+                           onChange={(e)=>updateActive("confidence", parseInt(e.target.value,10))}
+                           style={{width:"100%"}} />
+                    <div className="tiny">Current: <b>{activeItem.data.confidence}</b> (use 1 = low, 5 = high)</div>
+
+                    <label className="lbl" style={{marginTop:10}}>Notes</label>
+                    <textarea className="inp" value={activeItem.data.notes} onChange={(e)=>updateActive("notes", e.target.value)} />
+
+                    <div className="hr"></div>
+                    <div className="lbl">Photo</div>
+                    <div className="tiny">Attach one representative photo for this item (you can expand to multiple later).</div>
+                    <div style={{marginTop:10, display:"flex", gap:10, flexWrap:"wrap"}}>
+                      <label className="btn btnPrimary" style={{display:"inline-flex", cursor:"pointer"}}>
+                        Upload Photo
+                        <input type="file" accept="image/*" style={{display:"none"}}
+                          onChange={(e)=> { const f = e.target.files?.[0]; if(f) setActivePhoto(f); e.target.value=""; }}
+                        />
+                      </label>
+                      <button className="btn" disabled={!activeItem.data.photo} onClick={() => updateActive("photo", null)}>
+                        Remove
+                      </button>
+                    </div>
+                    {activeItem.data.photo?.url && (
+                      <div style={{marginTop:10}}>
+                        <img src={activeItem.data.photo.url} alt="item" style={{width:"100%", borderRadius:14, border:"1px solid rgba(226,232,240,0.95)"}} />
+                        <div className="tiny" style={{marginTop:6}}>Loaded: <b>{activeItem.data.photo.name}</b></div>
+                      </div>
+                    )}
+
+                    <div className="hr"></div>
+                    <div className="row">
+                      <button className="btn btnDanger btnFull" onClick={deleteActive}>Delete item</button>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* quick guidance */}
+              <div className="card">
+                <div className="lbl">Workflow hint</div>
+                <div className="tiny">
+                  Start with <b>AOI</b> to map interior conditions by room/elevation, then place <b>MR</b> at reading locations,
+                  then add one or more <b>SRC</b> markers to document suspected pathways and rationale. Use <b>NOTE</b> for occupant statements,
+                  odors, recent repairs, and environmental context.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
