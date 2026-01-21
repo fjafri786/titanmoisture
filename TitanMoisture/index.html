@@ -706,6 +706,7 @@
 
       const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
       const [lastSavedAt, setLastSavedAt] = useState(null);
+      const [isMobile, setIsMobile] = useState(window.innerWidth <= 820);
 
       // Header / project meta
       const [hdrCollapsed, setHdrCollapsed] = useState(true);
@@ -728,7 +729,9 @@
       const [view, setView] = useState({ scale: 1.0, tx: 0, ty: 0 });
       const [drag, setDrag] = useState(null); // {mode:'pan'|'move', id, start:{x,y}, origin:{tx,ty} or originPos:{x,y}}
 
-      const isMobile = window.innerWidth <= 820;
+      useEffect(() => {
+        if(!isMobile) setMobilePanelOpen(false);
+      }, [isMobile]);
 
       const activeItem = items.find(i => i.id === selectedId) || null;
 
@@ -808,6 +811,15 @@
         return { x: clamp(pos.x, minX, Math.max(minX, maxX)), y: clamp(pos.y, minY, Math.max(minY, maxY)) };
       }, []);
 
+      useEffect(() => {
+        const onResize = () => {
+          setIsMobile(window.innerWidth <= 820);
+          setToolbarPos(p => clampToolbarPos(p));
+        };
+        window.addEventListener("resize", onResize);
+        return () => window.removeEventListener("resize", onResize);
+      }, [clampToolbarPos]);
+
       useEffect(() => { setToolbarPos(p => clampToolbarPos(p)); }, [clampToolbarPos]);
 
       const onToolbarDown = (e) => {
@@ -825,6 +837,12 @@
         setToolbarPos(clampToolbarPos({ x: ox + (e.clientX - sx), y: oy + (e.clientY - sy) }));
       };
       const onToolbarUp = (e) => {
+        if(!toolbarDragRef.current) return;
+        toolbarDragRef.current = null;
+        setToolbarDragging(false);
+        try{ e.currentTarget.releasePointerCapture(e.pointerId); }catch{}
+      };
+      const onToolbarCancel = (e) => {
         if(!toolbarDragRef.current) return;
         toolbarDragRef.current = null;
         setToolbarDragging(false);
@@ -984,6 +1002,11 @@
         setDrag(null);
         try{ e.currentTarget.releasePointerCapture(e.pointerId); }catch{}
       };
+      const onPointerCancel = (e) => {
+        if(!drag) return;
+        setDrag(null);
+        try{ e.currentTarget.releasePointerCapture(e.pointerId); }catch{}
+      };
 
       const onWheel = (e) => {
         e.preventDefault();
@@ -1076,6 +1099,7 @@
               onPointerDown={onToolbarDown}
               onPointerMove={onToolbarMove}
               onPointerUp={onToolbarUp}
+              onPointerCancel={onToolbarCancel}
             >
               <div className="tbCenter">
                 <div className="tbTitle">TitanMoisture • Tools</div>
@@ -1118,6 +1142,7 @@
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
+              onPointerCancel={onPointerCancel}
               onWheel={onWheel}
             >
               <div
