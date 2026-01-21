@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-  <title>TitanMoisture (Moisture Notes v0.1)</title>
+  <title>TitanMoisture (Moisture Notes v0.2)</title>
 
   <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
@@ -546,6 +546,46 @@
       outline: 3px solid rgba(11,167,165,0.45);
       outline-offset: 2px;
     }
+    .areaLabel{
+      position:absolute;
+      transform: translate(-50%,-50%);
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(147,51,234,0.92);
+      color:#fff;
+      font-weight:1200;
+      font-size:11px;
+      border:2px solid rgba(255,255,255,0.92);
+      box-shadow: 0 10px 18px rgba(2,6,23,0.18);
+      user-select:none;
+    }
+    .areaLabel.selected{
+      outline: 3px solid rgba(11,167,165,0.45);
+      outline-offset: 2px;
+    }
+    .sheetOverlay{
+      position:absolute;
+      inset:0;
+      pointer-events:none;
+    }
+    .areaPoly{
+      fill: rgba(147,51,234,0.18);
+      stroke: rgba(147,51,234,0.9);
+      stroke-width: 2;
+    }
+    .areaPoly.draft{
+      fill: rgba(147,51,234,0.12);
+      stroke-dasharray: 6 4;
+    }
+    .areaPoint{
+      fill: #fff;
+      stroke: rgba(147,51,234,0.9);
+      stroke-width: 2;
+    }
+    .areaPolyClickable{
+      pointer-events: all;
+      cursor: pointer;
+    }
 
     /* Responsive */
     @media (max-width: 980px){
@@ -607,6 +647,79 @@
     }
 
     .ico{ width:18px; height:18px; color: currentColor; }
+
+    .printArea{
+      display:none;
+    }
+    @media print{
+      body{ background:#fff; overflow: visible; }
+      body *{ visibility: hidden; }
+      .printArea, .printArea *{ visibility: visible; }
+      .printArea{
+        display:block;
+        position:absolute;
+        inset:0;
+        padding: 0;
+      }
+      .printPage{
+        page-break-after: always;
+        padding: 24px 28px 30px;
+      }
+      .printHeader{
+        display:flex;
+        align-items:flex-start;
+        justify-content:space-between;
+        gap:20px;
+        margin-bottom: 18px;
+      }
+      .printTitle{
+        font-size:20px;
+        font-weight:1200;
+        color:#0B1220;
+      }
+      .printMeta{
+        font-size:12px;
+        color:#475569;
+        line-height:1.4;
+      }
+      .printSheetWrap{
+        border:1px solid rgba(148,163,184,0.6);
+        border-radius:18px;
+        padding: 12px;
+        margin-bottom: 18px;
+      }
+      .printSheet{
+        width: 100%;
+        aspect-ratio: 1024 / 720;
+        position:relative;
+        overflow:hidden;
+        border-radius:14px;
+        border:1px solid rgba(148,163,184,0.4);
+      }
+      .printList{
+        margin-top: 12px;
+        font-size:12px;
+      }
+      .printList h4{
+        margin: 0 0 8px 0;
+        font-size:12px;
+        text-transform:uppercase;
+        letter-spacing:0.4px;
+        color:#475569;
+      }
+      .printListItem{
+        padding: 8px 10px;
+        border:1px solid rgba(148,163,184,0.4);
+        border-radius:10px;
+        margin-bottom:8px;
+        background:#F8FAFC;
+      }
+      .printFoot{
+        margin-top: 10px;
+        font-size:11px;
+        color:#64748B;
+      }
+    }
   </style>
 </head>
 
@@ -660,13 +773,15 @@
       return null;
     };
 
-    const STORAGE_KEY = "titanmoisture.v0.1.state";
+    const STORAGE_KEY = "titanmoisture.v0.2.state";
 
     const ROOMS_DEFAULT = ["Living", "Kitchen", "Primary Bed", "Bath 1", "Hall", "Attic", "Garage", "Other"];
     const ELEVATIONS = ["Ceiling", "Wall", "Floor", "Window", "Door", "Trim", "Cabinet", "Other"];
     const INTERIOR_CONDITIONS = [
-      "Water staining",
-      "Paint bubbling / peeling",
+      "Moisture staining (spot)",
+      "Moisture staining (area/pattern)",
+      "Peeled paint",
+      "Bubbled/blistered paint",
       "Drywall softening",
       "Swollen wood fibers",
       "Baseboard separation",
@@ -681,9 +796,12 @@
       "Window / door opening",
       "Plumbing supply line",
       "Plumbing drain / trap",
-      "HVAC condensate",
+      "Drain / cleanout",
+      "Vent stack / roof vent",
+      "HVAC condensate / air handler",
       "Water heater pan/line",
       "Appliance line (ice maker, washer)",
+      "Interior plumbing fixture",
       "Exterior cladding / weep / flashing",
       "Condensation / humidity",
       "Unknown / to be determined"
@@ -696,7 +814,7 @@
       const sheetRef = useRef(null);
       const toolbarRef = useRef(null);
 
-      const [tool, setTool] = useState("aoi"); // aoi | read | src | note | pan
+      const [tool, setTool] = useState("aoi"); // aoi | area | read | src | note | pan
       const [selectedId, setSelectedId] = useState(null);
 
       const [toolbarPos, setToolbarPos] = useState({ x: 20, y: 80 });
@@ -717,13 +835,16 @@
       const [propertyCity, setPropertyCity] = useState("Houston, Texas");
       const [eventContext, setEventContext] = useState("Moisture Intrusion Assessment");
       const [scopeNote, setScopeNote] = useState("Interior observations and moisture-related conditions.");
+      const [residentNotes, setResidentNotes] = useState("");
 
-      // background (optional)
-      const [bg, setBg] = useState(null); // {name,url,dataUrl}
+      const defaultPage = useMemo(() => ({ id: uid(), name: "Page 1", bg: null }), []);
+      const [pages, setPages] = useState([defaultPage]);
+      const [activePageId, setActivePageId] = useState(defaultPage.id);
 
       // items
-      const counts = useRef({ aoi:1, read:1, src:1, note:1 });
+      const counts = useRef({ aoi:1, area:1, read:1, src:1, note:1 });
       const [items, setItems] = useState([]);
+      const [draftPolygon, setDraftPolygon] = useState(null);
 
       // view (pan/zoom + pinch)
       const [view, setView] = useState({ scale: 1.0, tx: 0, ty: 0 });
@@ -733,7 +854,13 @@
         if(!isMobile) setMobilePanelOpen(false);
       }, [isMobile]);
 
+      useEffect(() => {
+        if(tool !== "area") setDraftPolygon(null);
+      }, [tool, activePageId]);
+
       const activeItem = items.find(i => i.id === selectedId) || null;
+      const activePage = pages.find(p => p.id === activePageId) || pages[0];
+      const activeItems = useMemo(() => items.filter(i => i.pageId === activePage?.id), [items, activePage]);
 
       // ===== persistence =====
       const serializeItem = (it) => ({
@@ -743,15 +870,20 @@
           photo: it.data.photo ? { name: it.data.photo.name, dataUrl: it.data.photo.dataUrl || it.data.photo.url } : null
         }
       });
+      const serializePage = (page) => ({
+        ...page,
+        bg: page.bg ? { name: page.bg.name, dataUrl: page.bg.dataUrl || page.bg.url } : null
+      });
 
       const buildState = useCallback(() => ({
-        projectName, inspectionDate, propertyCity, eventContext, scopeNote,
+        projectName, inspectionDate, propertyCity, eventContext, scopeNote, residentNotes,
         hdrCollapsed,
-        bg: bg ? { name: bg.name, dataUrl: bg.dataUrl || bg.url } : null,
+        pages: pages.map(serializePage),
+        activePageId,
         items: items.map(serializeItem),
         counts: counts.current,
         view
-      }), [projectName, inspectionDate, propertyCity, eventContext, scopeNote, hdrCollapsed, bg, items, view]);
+      }), [projectName, inspectionDate, propertyCity, eventContext, scopeNote, residentNotes, hdrCollapsed, pages, activePageId, items, view]);
 
       const saveState = useCallback((source="manual") => {
         try{
@@ -772,14 +904,23 @@
           setPropertyCity(s.propertyCity || "Houston, Texas");
           setEventContext(s.eventContext || "Moisture Intrusion Assessment");
           setScopeNote(s.scopeNote || "Interior observations and moisture-related conditions.");
+          setResidentNotes(s.residentNotes || "");
           setHdrCollapsed(s.hdrCollapsed ?? true);
           setView(s.view || { scale:1, tx:0, ty:0 });
-          if(s.bg?.dataUrl){
-            setBg({ name: s.bg.name || "Background", url: s.bg.dataUrl, dataUrl: s.bg.dataUrl });
+          let fallbackPageId = defaultPage.id;
+          if(Array.isArray(s.pages) && s.pages.length){
+            const revivedPages = s.pages.map(page => ({
+              ...page,
+              bg: page.bg?.dataUrl ? { name: page.bg.name || "Background", url: page.bg.dataUrl, dataUrl: page.bg.dataUrl } : null
+            }));
+            setPages(revivedPages);
+            fallbackPageId = s.activePageId || revivedPages[0]?.id || fallbackPageId;
+            setActivePageId(fallbackPageId);
           }
           if(Array.isArray(s.items)){
             const revived = s.items.map(it => ({
               ...it,
+              pageId: it.pageId || fallbackPageId,
               data: {
                 ...it.data,
                 photo: it.data?.photo?.dataUrl ? reviveFileObj(it.data.photo) : null
@@ -787,7 +928,7 @@
             }));
             setItems(revived);
           }
-          if(s.counts) counts.current = s.counts;
+          if(s.counts) counts.current = { aoi:1, area:1, read:1, src:1, note:1, ...s.counts };
         }catch(e){
           console.warn("Restore failed", e);
         }
@@ -899,32 +1040,40 @@
           name: "",
           x: pos.x,
           y: pos.y,
+          pageId: activePageId,
           data: {
             room: "Living",
             elevation: "Wall",
-            condition: "Water staining",
+            condition: "Moisture staining (spot)",
             extent: "",
+            measurements: "",
             instrument: "Pin meter",
             reading: "",
             units: "WME",
             suspectedSource: "Unknown / to be determined",
-            confidence: 2, // 1-5
+            pathwayNotes: "",
+            tags: "",
             notes: "",
-            photo: null
+            photo: null,
+            photoCaption: ""
           }
         };
 
         if(type === "aoi"){
           base.name = `AOI-${n}`;
-          base.data = { ...base.data, notes: "Area of interest. Describe observed condition(s), moisture pattern, and any nearby features." };
+          base.data = { ...base.data, notes: "Area of interest. Describe observed condition(s), moisture pattern, and nearby features." };
+        }
+        if(type === "area"){
+          base.name = `AOI-A${n}`;
+          base.data = { ...base.data, notes: "AOI area polygon. Outline the visible condition and capture measurements." };
         }
         if(type === "read"){
           base.name = `MR-${n}`;
-          base.data = { ...base.data, condition: "Water staining", notes: "Document the reading location, substrate, and instrument type/model if needed." };
+          base.data = { ...base.data, condition: "Moisture staining (spot)", notes: "Document reading location, substrate, and instrument type/model." };
         }
         if(type === "src"){
           base.name = `SRC-${n}`;
-          base.data = { ...base.data, suspectedSource: "Roof / flashing pathway", notes: "Describe suspected pathway and rationale. Identify needed follow-up (e.g., hose test, attic review)." };
+          base.data = { ...base.data, suspectedSource: "Roof / flashing pathway", notes: "Describe suspected pathway/cause and rationale. Identify needed follow-up." };
         }
         if(type === "note"){
           base.name = `NOTE-${n}`;
@@ -935,17 +1084,46 @@
 
       const markerColorClass = (t) => (t === "aoi" ? "aoi" : t === "read" ? "read" : t === "src" ? "src" : "note");
 
+      const polygonCenter = (points) => {
+        if(!points?.length) return { x: 0.5, y: 0.5 };
+        const sum = points.reduce((acc, p) => ({ x: acc.x + p.x, y: acc.y + p.y }), { x:0, y:0 });
+        return { x: sum.x / points.length, y: sum.y / points.length };
+      };
+
       const addAtClick = (e) => {
         if(tool === "pan") return;
         const hitMarker = e.target.closest("[data-marker-id]");
+        const hitArea = e.target.closest(".areaLabel") || e.target.closest(".areaPolyClickable");
         if(hitMarker) return;
+        if(hitArea) return;
         const p = clientToSheet(e.clientX, e.clientY);
         if(!p) return;
+        if(tool === "area"){
+          setDraftPolygon(prev => {
+            if(!prev || prev.pageId !== activePageId){
+              return { pageId: activePageId, points: [p] };
+            }
+            return { ...prev, points: [...prev.points, p] };
+          });
+          return;
+        }
         const it = createItem(tool, p);
         setItems(prev => [...prev, it]);
         setSelectedId(it.id);
         if(isMobile) setMobilePanelOpen(true);
       };
+
+      const finishPolygon = () => {
+        if(!draftPolygon || draftPolygon.points.length < 3) return;
+        const center = polygonCenter(draftPolygon.points);
+        const it = { ...createItem("area", center), points: draftPolygon.points, pageId: activePageId };
+        setItems(prev => [...prev, it]);
+        setSelectedId(it.id);
+        setDraftPolygon(null);
+        if(isMobile) setMobilePanelOpen(true);
+      };
+
+      const cancelPolygon = () => setDraftPolygon(null);
 
       const onPointerDown = (e) => {
         const markerEl = e.target.closest("[data-marker-id]");
@@ -1020,13 +1198,52 @@
         }
       };
 
-      const group = useMemo(() => {
-        const g = { aoi: [], read: [], src: [], note: [] };
-        items.forEach(it => g[it.type]?.push(it));
-        return g;
-      }, [items]);
+      const onDoubleClick = (e) => {
+        if(tool !== "area") return;
+        e.preventDefault();
+        finishPolygon();
+      };
 
-      const [groupOpen, setGroupOpen] = useState({ aoi:true, read:true, src:true, note:true });
+      const group = useMemo(() => {
+        const g = { aoi: [], area: [], read: [], src: [], note: [] };
+        activeItems.forEach(it => g[it.type]?.push(it));
+        return g;
+      }, [activeItems]);
+
+      const [groupOpen, setGroupOpen] = useState({ aoi:true, area:true, read:true, src:true, note:true });
+
+      const addPage = () => {
+        const nextIndex = pages.length + 1;
+        const newPage = { id: uid(), name: `Page ${nextIndex}`, bg: null };
+        setPages(prev => [...prev, newPage]);
+        setActivePageId(newPage.id);
+        setSelectedId(null);
+      };
+
+      const duplicatePage = () => {
+        if(!activePage) return;
+        const nextIndex = pages.length + 1;
+        const newPage = {
+          id: uid(),
+          name: `${activePage.name || `Page ${nextIndex}`} Copy`,
+          bg: activePage.bg ? { ...activePage.bg } : null
+        };
+        setPages(prev => [...prev, newPage]);
+        const pageItems = items.filter(it => it.pageId === activePage.id).map(it => ({ ...it, id: uid(), pageId: newPage.id }));
+        setItems(prev => [...prev, ...pageItems]);
+        setActivePageId(newPage.id);
+        setSelectedId(null);
+      };
+
+      const deletePage = () => {
+        if(pages.length <= 1) return;
+        if(!confirm("Delete this page and its items?")) return;
+        const remaining = pages.filter(p => p.id !== activePageId);
+        setPages(remaining);
+        setItems(prev => prev.filter(it => it.pageId !== activePageId));
+        setActivePageId(remaining[0]?.id);
+        setSelectedId(null);
+      };
 
       const deleteActive = () => {
         if(!selectedId) return;
@@ -1038,8 +1255,9 @@
         if(!confirm("Clear all TitanMoisture notes? (This will also clear saved state)")) return;
         setItems([]);
         setSelectedId(null);
-        setBg(null);
-        counts.current = { aoi:1, read:1, src:1, note:1 };
+        setPages([defaultPage]);
+        setActivePageId(defaultPage.id);
+        counts.current = { aoi:1, area:1, read:1, src:1, note:1 };
         localStorage.removeItem(STORAGE_KEY);
         setLastSavedAt(null);
       };
@@ -1055,15 +1273,8 @@
         setItems(prev => prev.map(i => i.id === activeItem.id ? ({ ...i, data: { ...i.data, [k]: v } }) : i));
       };
 
-      const exportJson = () => {
-        const payload = buildState();
-        const blob = new Blob([JSON.stringify(payload, null, 2)], { type:"application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = (projectName || "TitanMoisture").replace(/[^\w\-]+/g, "_") + "_export.json";
-        a.click();
-        URL.revokeObjectURL(url);
+      const exportPdf = () => {
+        window.print();
       };
 
       // simple grid overlay lines
@@ -1087,9 +1298,11 @@
       // header summary
       const metaLine2 = `${eventContext}${inspectionDate ? " • " + inspectionDate : ""}`;
       const metaLine3 = `${propertyCity}`;
+      const typeLabels = { aoi: "AOI Marker", area: "AOI Area", read: "Moisture Reading", src: "Source/Pathway", note: "Note" };
 
       return (
-        <div className="app">
+        <>
+          <div className="app">
           {/* canvas */}
           <div className="canvasZone">
             <div
@@ -1105,12 +1318,23 @@
                 <div className="tbTitle">TitanMoisture • Tools</div>
                 <div className="tbTools">
                   <button className={"toolBtn aoi expanded" + (tool==="aoi" ? " active" : "")} onClick={() => setTool("aoi")}><span className="toolText">AOI</span></button>
+                  <button className={"toolBtn aoi expanded" + (tool==="area" ? " active" : "")} onClick={() => setTool("area")}><span className="toolText">AREA</span></button>
                   <button className={"toolBtn read expanded" + (tool==="read" ? " active" : "")} onClick={() => setTool("read")}><span className="toolText">MR</span></button>
                   <button className={"toolBtn src expanded" + (tool==="src" ? " active" : "")} onClick={() => setTool("src")}><span className="toolText">SRC</span></button>
                   <button className={"toolBtn note expanded" + (tool==="note" ? " active" : "")} onClick={() => setTool("note")}><span className="toolText">NOTE</span></button>
                   <div className="tbDivider"></div>
                   <button className={"toolBtn note expanded" + (tool==="pan" ? " active" : "")} style={{"--toolColor":"var(--navy)"}}
                           onClick={() => setTool("pan")}><span className="toolText">PAN</span></button>
+                  {tool === "area" && (
+                    <>
+                      <button className={"toolBtn aoi expanded"} disabled={!draftPolygon || draftPolygon.points.length < 3} onClick={finishPolygon}>
+                        <span className="toolText">Finish</span>
+                      </button>
+                      <button className={"toolBtn note expanded"} style={{"--toolColor":"var(--c-apt)"}} onClick={cancelPolygon}>
+                        <span className="toolText">Cancel</span>
+                      </button>
+                    </>
+                  )}
                   <div className={"lockIcon " + (toolbarLocked ? "locked" : "unlocked")} title={toolbarLocked ? "Locked" : "Unlocked"}
                        onClick={() => setToolbarLocked(v => !v)}>
                     {toolbarLocked ? <Icon name="lock" /> : <Icon name="unlock" />}
@@ -1130,7 +1354,7 @@
                   <div className="zReadout">{Math.round(view.scale*100)}%</div>
                 </div>
                 <div className="hint">
-                  Tap to place: <b>AOI</b> (purple), <b>MR</b> readings (blue), <b>SRC</b> suspected source (green), <b>NOTE</b> (charcoal). Use <b>PAN</b> to move the sheet.
+                  Tap to place: <b>AOI</b> (purple), <b>AREA</b> polygons, <b>MR</b> readings (blue), <b>SRC</b> pathways (green), <b>NOTE</b> (charcoal). Use <b>PAN</b> to move the sheet. Double-tap or click Finish to close a polygon.
                 </div>
               </div>
             </div>
@@ -1144,6 +1368,7 @@
               onPointerUp={onPointerUp}
               onPointerCancel={onPointerCancel}
               onWheel={onWheel}
+              onDoubleClick={onDoubleClick}
             >
               <div
                 ref={stageRef}
@@ -1153,10 +1378,46 @@
                 }}
               >
                 <div className="sheet" ref={sheetRef}>
-                  {bg?.url ? <img className="sheetBg" src={bg.url} alt="background" /> : null}
+                  {activePage?.bg?.url ? <img className="sheetBg" src={activePage.bg.url} alt="background" /> : null}
                   <Grid />
 
-                  {items.map(it => (
+                  <svg className="sheetOverlay" width="1024" height="720" viewBox="0 0 1024 720">
+                    {activeItems.filter(it => it.type === "area" && Array.isArray(it.points)).map(it => (
+                      <polygon
+                        key={it.id}
+                        className="areaPoly areaPolyClickable"
+                        points={it.points.map(p => `${p.x*1024},${p.y*720}`).join(" ")}
+                        onClick={(e) => { e.stopPropagation(); setSelectedId(it.id); if(isMobile) setMobilePanelOpen(true); }}
+                      />
+                    ))}
+                    {draftPolygon?.pageId === activePageId && draftPolygon.points.length > 0 && (
+                      <>
+                        <polygon
+                          className="areaPoly draft"
+                          points={draftPolygon.points.map(p => `${p.x*1024},${p.y*720}`).join(" ")}
+                        />
+                        {draftPolygon.points.map((p, idx) => (
+                          <circle key={`pt-${idx}`} className="areaPoint" cx={p.x*1024} cy={p.y*720} r="5" />
+                        ))}
+                      </>
+                    )}
+                  </svg>
+
+                  {activeItems.filter(it => it.type === "area" && Array.isArray(it.points)).map(it => {
+                    const center = polygonCenter(it.points);
+                    return (
+                      <div
+                        key={`${it.id}-label`}
+                        className={"areaLabel" + (it.id === selectedId ? " selected" : "")}
+                        style={{ left: `${center.x*100}%`, top: `${center.y*100}%` }}
+                        onClick={(e) => { e.stopPropagation(); setSelectedId(it.id); if(isMobile) setMobilePanelOpen(true); }}
+                      >
+                        {it.name}
+                      </div>
+                    );
+                  })}
+
+                  {activeItems.filter(it => it.type !== "area").map(it => (
                     <div
                       key={it.id}
                       data-marker-id={it.id}
@@ -1188,7 +1449,7 @@
           <div className={"panel" + (isMobile && mobilePanelOpen ? " mobileOpen" : "")}>
             <div className="pHeader">
               <div>
-                <div className="hdrLine0">TitanMoisture • Version 0.1</div>
+                <div className="hdrLine0">TitanMoisture • Version 0.2</div>
                 <div className="hdrLine1">{projectName}</div>
                 {!hdrCollapsed && (
                   <>
@@ -1207,7 +1468,7 @@
                   <span style={{display:"inline-flex", alignItems:"center", gap:8}}><Icon name="pencil" /> Edit</span>
                 </button>
                 <button className="hdrBtn" onClick={() => saveState("manual")}>Save</button>
-                <button className="hdrBtn" onClick={exportJson}>Export JSON</button>
+                <button className="hdrBtn" onClick={exportPdf}>Export PDF</button>
                 <button className="hdrBtn" onClick={clearAll}>Reset</button>
                 <div className="hdrSaveMeta">
                   {lastSavedAt ? `${lastSavedAt.source === "auto" ? "Auto saved" : "Last saved"} ${lastSavedAt.time}` : "Not saved yet"}
@@ -1240,8 +1501,8 @@
                   <textarea className="inp" value={scopeNote} onChange={(e)=>setScopeNote(e.target.value)} />
 
                   <div className="hr"></div>
-                  <div className="lbl">Optional background</div>
-                  <div className="tiny">Upload a photo or quick floor plan screenshot for reference (not required).</div>
+                  <div className="lbl">Background (per page)</div>
+                  <div className="tiny">Upload a photo or quick floor plan screenshot for reference (per page).</div>
                   <div style={{marginTop:10}}>
                     <label className="btn btnPrimary" style={{display:"inline-flex", cursor:"pointer"}}>
                       Upload Background
@@ -1250,25 +1511,56 @@
                           const f = e.target.files?.[0];
                           if(!f) return;
                           const obj = await fileToObj(f);
-                          setBg(obj);
+                          setPages(prev => prev.map(p => p.id === activePageId ? ({ ...p, bg: obj }) : p));
                           e.target.value = "";
                         }}
                       />
                     </label>
-                    {bg?.name && <div className="tiny" style={{marginTop:8}}>Loaded: <b>{bg.name}</b></div>}
-                    {bg && (
+                    {activePage?.bg?.name && <div className="tiny" style={{marginTop:8}}>Loaded: <b>{activePage.bg.name}</b></div>}
+                    {activePage?.bg && (
                       <div style={{marginTop:10}}>
-                        <button className="btn btnDanger" onClick={() => setBg(null)}>Remove Background</button>
+                        <button className="btn btnDanger" onClick={() => setPages(prev => prev.map(p => p.id === activePageId ? ({ ...p, bg: null }) : p))}>Remove Background</button>
                       </div>
                     )}
                   </div>
+
+                  <label className="lbl" style={{marginTop:12}}>Resident / client statement</label>
+                  <textarea className="inp" placeholder="Notes shared by homeowner/resident/client (exported in PDF)."
+                            value={residentNotes} onChange={(e)=>setResidentNotes(e.target.value)} />
                 </div>
               )}
+
+              <div className="card">
+                <div className="lbl">Pages / floors</div>
+                <div className="tiny">Add multiple pages to document observations across floors or areas.</div>
+                <label className="lbl" style={{marginTop:10}}>Active page name</label>
+                <input className="inp" value={activePage?.name || ""} onChange={(e) => {
+                  const v = e.target.value;
+                  setPages(prev => prev.map(p => p.id === activePageId ? ({ ...p, name: v }) : p));
+                }} />
+                <div className="row" style={{marginTop:10, flexWrap:"wrap"}}>
+                  {pages.map(page => (
+                    <button
+                      key={page.id}
+                      className="btn"
+                      style={{borderColor: page.id === activePageId ? "rgba(11,167,165,0.5)" : undefined, background: page.id === activePageId ? "rgba(11,167,165,0.08)" : undefined}}
+                      onClick={() => { setActivePageId(page.id); setSelectedId(null); }}
+                    >
+                      {page.name || "Untitled"}
+                    </button>
+                  ))}
+                </div>
+                <div className="row" style={{marginTop:10}}>
+                  <button className="btn btnPrimary" onClick={addPage}>Add Page</button>
+                  <button className="btn" onClick={duplicatePage}>Duplicate</button>
+                  <button className="btn btnDanger" onClick={deletePage} disabled={pages.length <= 1}>Delete</button>
+                </div>
+              </div>
 
               {/* Items list */}
               <div className="card">
                 <div className="lbl">Items</div>
-                <div className="tiny">Select an item below, or place new markers on the sheet using the toolbar.</div>
+                <div className="tiny">Select an item below, or place new markers/polygons on the sheet using the toolbar.</div>
 
                 <div style={{marginTop:12}}>
                   <div className={"groupHeader aoi"} onClick={() => setGroupOpen(s => ({...s, aoi: !s.aoi}))}>
@@ -1286,6 +1578,26 @@
                         <span>{it.data.room} • {it.data.elevation} • {it.data.condition}</span>
                       </div>
                       <span className="badge">AOI</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{marginTop:12}}>
+                  <div className={"groupHeader aoi"} onClick={() => setGroupOpen(s => ({...s, area: !s.area}))}>
+                    <div className="groupTitle">
+                      AOI Areas (Polygons)
+                      <span className="groupCount">{group.area.length}</span>
+                    </div>
+                    <div className="groupChevron"><Icon name={groupOpen.area ? "chevUp" : "chevDown"} /></div>
+                  </div>
+                  {groupOpen.area && group.area.map(it => (
+                    <div key={it.id} className={"itemRow" + (it.id===selectedId ? " selected" : "")} style={{borderLeftColor:"var(--c-aoi)"}}
+                         onClick={() => { setSelectedId(it.id); if(isMobile) setMobilePanelOpen(true); }}>
+                      <div className="itemInfo">
+                        <b>{it.name}</b>
+                        <span>{it.data.room} • {it.data.elevation} • {it.data.condition}</span>
+                      </div>
+                      <span className="badge">AOI Area</span>
                     </div>
                   ))}
                 </div>
@@ -1388,6 +1700,13 @@
                         </select>
                       </div>
                     </div>
+                    <div style={{marginTop:8, display:"flex", gap:8, flexWrap:"wrap"}}>
+                      {["Ceiling", "Wall", "Floor"].map(option => (
+                        <button key={option} className="btn" onClick={() => updateActive("elevation", option)}>
+                          {option}
+                        </button>
+                      ))}
+                    </div>
 
                     <div className="row" style={{marginTop:10}}>
                       <div>
@@ -1419,23 +1738,31 @@
                       </div>
                     </div>
 
+                    <div className="row" style={{marginTop:10}}>
+                      <div>
+                        <label className="lbl">Measurements</label>
+                        <input className="inp" placeholder='e.g., "12 in x 18 in" / "4 ft linear"' value={activeItem.data.measurements} onChange={(e)=>updateActive("measurements", e.target.value)} />
+                      </div>
+                      <div>
+                        <label className="lbl">Tags</label>
+                        <input className="inp" placeholder="e.g., blistered paint, north wall" value={activeItem.data.tags} onChange={(e)=>updateActive("tags", e.target.value)} />
+                      </div>
+                    </div>
+
                     <label className="lbl" style={{marginTop:10}}>Suspected source / pathway</label>
                     <select className="inp" value={activeItem.data.suspectedSource} onChange={(e)=>updateActive("suspectedSource", e.target.value)}>
                       {SUSPECTED_SOURCES.map(x => <option key={x} value={x}>{x}</option>)}
                     </select>
 
-                    <label className="lbl" style={{marginTop:10}}>Confidence (1–5)</label>
-                    <input type="range" min="1" max="5" value={activeItem.data.confidence}
-                           onChange={(e)=>updateActive("confidence", parseInt(e.target.value,10))}
-                           style={{width:"100%"}} />
-                    <div className="tiny">Current: <b>{activeItem.data.confidence}</b> (use 1 = low, 5 = high)</div>
+                    <label className="lbl" style={{marginTop:10}}>Pathway / cause details</label>
+                    <textarea className="inp" value={activeItem.data.pathwayNotes} onChange={(e)=>updateActive("pathwayNotes", e.target.value)} />
 
                     <label className="lbl" style={{marginTop:10}}>Notes</label>
                     <textarea className="inp" value={activeItem.data.notes} onChange={(e)=>updateActive("notes", e.target.value)} />
 
                     <div className="hr"></div>
                     <div className="lbl">Photo</div>
-                    <div className="tiny">Attach one representative photo for this item (you can expand to multiple later).</div>
+                    <div className="tiny">Attach a representative photo and caption for this item.</div>
                     <div style={{marginTop:10, display:"flex", gap:10, flexWrap:"wrap"}}>
                       <label className="btn btnPrimary" style={{display:"inline-flex", cursor:"pointer"}}>
                         Upload Photo
@@ -1447,6 +1774,8 @@
                         Remove
                       </button>
                     </div>
+                    <label className="lbl" style={{marginTop:10}}>Photo caption</label>
+                    <input className="inp" placeholder="Caption for the photo" value={activeItem.data.photoCaption} onChange={(e)=>updateActive("photoCaption", e.target.value)} />
                     {activeItem.data.photo?.url && (
                       <div style={{marginTop:10}}>
                         <img src={activeItem.data.photo.url} alt="item" style={{width:"100%", borderRadius:14, border:"1px solid rgba(226,232,240,0.95)"}} />
@@ -1466,14 +1795,101 @@
               <div className="card">
                 <div className="lbl">Workflow hint</div>
                 <div className="tiny">
-                  Start with <b>AOI</b> to map interior conditions by room/elevation, then place <b>MR</b> at reading locations,
-                  then add one or more <b>SRC</b> markers to document suspected pathways and rationale. Use <b>NOTE</b> for occupant statements,
-                  odors, recent repairs, and environmental context.
+                  Start with <b>AOI</b> markers or <b>AREA</b> polygons to map interior conditions by room/elevation, then place <b>MR</b> at reading locations,
+                  then add one or more <b>SRC</b> markers to document pathways/causes. Use <b>NOTE</b> for occupant statements,
+                  odors, recent repairs, and environmental context. Measurements and captions are critical for objective reporting.
                 </div>
               </div>
             </div>
           </div>
-        </div>
+          </div>
+
+          <div className="printArea">
+            {pages.map((page, index) => {
+              const pageItems = items.filter(it => it.pageId === page.id);
+              return (
+                <div key={page.id} className="printPage">
+                  <div className="printHeader">
+                    <div>
+                      <div className="printTitle">{projectName || "Project"} — {page.name || `Page ${index + 1}`}</div>
+                      <div className="printMeta">{eventContext}{inspectionDate ? ` • ${inspectionDate}` : ""}</div>
+                      <div className="printMeta">{propertyCity}</div>
+                    </div>
+                    <div className="printMeta">Page {index + 1} of {pages.length}</div>
+                  </div>
+                  <div className="printMeta" style={{marginBottom:12}}>
+                    <div><b>Scope:</b> {scopeNote}</div>
+                    {residentNotes && <div><b>Resident / client statement:</b> {residentNotes}</div>}
+                  </div>
+
+                  <div className="printSheetWrap">
+                    <div className="printSheet">
+                      {page.bg?.url ? <img className="sheetBg" src={page.bg.url} alt="background" /> : null}
+                      <Grid />
+                      <svg className="sheetOverlay" width="1024" height="720" viewBox="0 0 1024 720">
+                        {pageItems.filter(it => it.type === "area" && Array.isArray(it.points)).map(it => (
+                          <polygon
+                            key={it.id}
+                            className="areaPoly"
+                            points={it.points.map(p => `${p.x*1024},${p.y*720}`).join(" ")}
+                          />
+                        ))}
+                      </svg>
+                      {pageItems.filter(it => it.type === "area" && Array.isArray(it.points)).map(it => {
+                        const center = polygonCenter(it.points);
+                        return (
+                          <div
+                            key={`${it.id}-print-label`}
+                            className="areaLabel"
+                            style={{ left: `${center.x*100}%`, top: `${center.y*100}%` }}
+                          >
+                            {it.name}
+                          </div>
+                        );
+                      })}
+                      {pageItems.filter(it => it.type !== "area").map(it => (
+                        <div
+                          key={it.id}
+                          className={"marker " + markerColorClass(it.type)}
+                          style={{ left: `${it.x*100}%`, top: `${it.y*100}%` }}
+                          title={it.name}
+                        >
+                          {it.name.split("-")[0]}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="printList">
+                    <h4>Observations</h4>
+                    {pageItems.length === 0 && <div className="printFoot">No items documented on this page.</div>}
+                    {pageItems.map(it => (
+                      <div key={`${it.id}-summary`} className="printListItem">
+                        <div><b>{it.name}</b> • {typeLabels[it.type] || it.type}</div>
+                        <div>Room/Elevation: {it.data.room} • {it.data.elevation}</div>
+                        <div>Condition: {it.data.condition}</div>
+                        {it.data.measurements && <div>Measurements: {it.data.measurements}</div>}
+                        {it.data.extent && <div>Extent: {it.data.extent}</div>}
+                        {it.data.reading && <div>Reading: {it.data.reading} {it.data.units}</div>}
+                        {it.data.suspectedSource && <div>Source/Pathway: {it.data.suspectedSource}</div>}
+                        {it.data.pathwayNotes && <div>Pathway notes: {it.data.pathwayNotes}</div>}
+                        {it.data.tags && <div>Tags: {it.data.tags}</div>}
+                        {it.data.notes && <div>Notes: {it.data.notes}</div>}
+                        {it.data.photoCaption && <div>Photo caption: {it.data.photoCaption}</div>}
+                        {it.data.photo?.url && (
+                          <div style={{marginTop:8}}>
+                            <img src={it.data.photo.url} alt={it.name} style={{width:"160px", borderRadius:10, border:"1px solid rgba(148,163,184,0.45)"}} />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="printFoot">Generated with TitanMoisture v0.2</div>
+                </div>
+              );
+            })}
+          </div>
+        </>
       );
     }
 
