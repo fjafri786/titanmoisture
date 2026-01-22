@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-  <title>TitanMoisture (Moisture Notes v0.2)</title>
+  <title>TitanMoisture (Moisture Notes v1.0)</title>
 
   <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
@@ -903,7 +903,13 @@
       return null;
     };
 
-    const STORAGE_KEY = "titanmoisture.v0.2.state";
+    const APP_VERSION = "1.0";
+    const STORAGE_KEY = `titanmoisture.v${APP_VERSION}.state`;
+    const LEGACY_STORAGE_KEYS = [
+      "titanmoisture.v0.2.state",
+      "titanmoisture.v0.1.state",
+      "titanmoisture.state"
+    ];
 
     const ROOMS_DEFAULT = ["Living", "Kitchen", "Primary Bed", "Bath 1", "Hall", "Attic", "Garage", "Other"];
     const ELEVATIONS = ["Ceiling", "Wall", "Floor", "Window", "Door", "Trim", "Cabinet", "Other"];
@@ -922,6 +928,23 @@
       "Other"
     ];
     const INSTRUMENTS = ["Pin meter", "Pinless meter", "IR camera", "Hygrometer", "Other/Unknown"];
+
+    const Grid = () => {
+      const lines = [];
+      for(let i=1;i<12;i++){
+        const x = (i/12)*1024;
+        lines.push(<line key={"vx"+i} x1={x} y1={0} x2={x} y2={720} className={i%3===0 ? "major" : ""} />);
+      }
+      for(let j=1;j<8;j++){
+        const y = (j/8)*720;
+        lines.push(<line key={"hy"+j} x1={0} y1={y} x2={1024} y2={y} className={j%2===0 ? "major" : ""} />);
+      }
+      return (
+        <svg className="sheetGrid" width="1024" height="720" viewBox="0 0 1024 720">
+          {lines}
+        </svg>
+      );
+    };
 
     function App(){
       const viewportRef = useRef(null);
@@ -1001,6 +1024,7 @@
       });
 
       const buildState = useCallback(() => ({
+        version: APP_VERSION,
         projectName, inspectionDate, propertyCity, eventContext, scopeNote, residentNotes,
         hdrCollapsed,
         pages: pages.map(serializePage),
@@ -1022,47 +1046,121 @@
       }, [buildState]);
 
       useEffect(() => {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if(!raw) return;
-        try{
-          const s = JSON.parse(raw);
-          setProjectName(s.projectName || "Enter Name");
-          setInspectionDate(s.inspectionDate || "");
-          setPropertyCity(s.propertyCity || "Houston, Texas");
-          setEventContext(s.eventContext || "Moisture Intrusion Assessment");
-          setScopeNote(s.scopeNote || "Interior observations and moisture-related conditions.");
-          setResidentNotes(s.residentNotes || "");
-          setHdrCollapsed(s.hdrCollapsed ?? true);
-          setView(s.view || { scale:1, tx:0, ty:0 });
-          let fallbackPageId = defaultPage.id;
+        const safeParseState = (raw) => {
+          if(!raw || typeof raw !== "string") return null;
+          try{
+            const parsed = JSON.parse(raw);
+            if(!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+            return parsed;
+          }catch(e){
+            return null;
+          }
+        };
+
+        const normalizeState = (s) => {
+          const base = {
+            version: APP_VERSION,
+            projectName: typeof s.projectName === "string" ? s.projectName : "Enter Name",
+            inspectionDate: typeof s.inspectionDate === "string" ? s.inspectionDate : "",
+            propertyCity: typeof s.propertyCity === "string" ? s.propertyCity : "Houston, Texas",
+            eventContext: typeof s.eventContext === "string" ? s.eventContext : "Moisture Intrusion Assessment",
+            scopeNote: typeof s.scopeNote === "string" ? s.scopeNote : "Interior observations and moisture-related conditions.",
+            residentNotes: typeof s.residentNotes === "string" ? s.residentNotes : "",
+            hdrCollapsed: typeof s.hdrCollapsed === "boolean" ? s.hdrCollapsed : true,
+            view: s.view && typeof s.view === "object" ? {
+              scale: Number(s.view.scale) || 1,
+              tx: Number(s.view.tx) || 0,
+              ty: Number(s.view.ty) || 0
+            } : { scale:1, tx:0, ty:0 },
+            pages: [],
+            activePageId: defaultPage.id,
+            items: [],
+            counts: s.counts && typeof s.counts === "object"
+              ? { aoi:1, area:1, read:1, line:1, note:1, ...s.counts }
+              : { aoi:1, area:1, read:1, line:1, note:1 }
+          };
+
           if(Array.isArray(s.pages) && s.pages.length){
             const revivedPages = s.pages.map(page => ({
               ...page,
-              bg: page.bg?.dataUrl ? { name: page.bg.name || "Background", url: page.bg.dataUrl, dataUrl: page.bg.dataUrl } : null
+              bg: page?.bg?.dataUrl ? { name: page.bg.name || "Background", url: page.bg.dataUrl, dataUrl: page.bg.dataUrl } : null
             }));
-            setPages(revivedPages);
-            fallbackPageId = s.activePageId || revivedPages[0]?.id || fallbackPageId;
-            setActivePageId(fallbackPageId);
+            base.pages = revivedPages;
+            base.activePageId = s.activePageId || revivedPages[0]?.id || base.activePageId;
+          }else{
+            base.pages = [defaultPage];
           }
+
           if(Array.isArray(s.items)){
-            const revived = s.items.map(it => ({
-              ...it,
-              type: it.type === "src" ? "note" : it.type,
-              pageId: it.pageId || fallbackPageId,
-              locked: it.locked ?? false,
-              data: {
-                ...it.data,
-                lineType: it.data?.lineType || "plumbing",
-                photo: it.data?.photo?.dataUrl ? reviveFileObj(it.data.photo) : null
-              }
-            }));
-            setItems(revived);
+            base.items = s.items.map(it => {
+              const data = it?.data && typeof it.data === "object" ? it.data : {};
+              return {
+                ...it,
+                type: it?.type === "src" ? "note" : (it?.type || "note"),
+                pageId: it?.pageId || base.activePageId,
+                locked: it?.locked ?? false,
+                data: {
+                  ...data,
+                  lineType: data.lineType || "plumbing",
+                  photo: data?.photo?.dataUrl ? reviveFileObj(data.photo) : null
+                }
+              };
+            });
           }
-          if(s.counts) counts.current = { aoi:1, area:1, read:1, line:1, note:1, ...s.counts };
-        }catch(e){
-          console.warn("Restore failed", e);
+
+          return base;
+        };
+
+        const loadFromKey = (key) => {
+          const raw = localStorage.getItem(key);
+          if(!raw) return null;
+          const parsed = safeParseState(raw);
+          if(!parsed){
+            localStorage.removeItem(key);
+            return null;
+          }
+          return parsed;
+        };
+
+        let parsed = loadFromKey(STORAGE_KEY);
+        let sourceKey = STORAGE_KEY;
+        if(!parsed){
+          for(const legacyKey of LEGACY_STORAGE_KEYS){
+            const legacyParsed = loadFromKey(legacyKey);
+            if(legacyParsed){
+              parsed = legacyParsed;
+              sourceKey = legacyKey;
+              break;
+            }
+          }
         }
-      }, []);
+
+        if(!parsed) return;
+        const normalized = normalizeState(parsed);
+        setProjectName(normalized.projectName);
+        setInspectionDate(normalized.inspectionDate);
+        setPropertyCity(normalized.propertyCity);
+        setEventContext(normalized.eventContext);
+        setScopeNote(normalized.scopeNote);
+        setResidentNotes(normalized.residentNotes);
+        setHdrCollapsed(normalized.hdrCollapsed);
+        setView(normalized.view);
+        setPages(normalized.pages);
+        setActivePageId(normalized.activePageId);
+        setItems(normalized.items);
+        counts.current = normalized.counts;
+
+        if(sourceKey !== STORAGE_KEY || parsed.version !== APP_VERSION){
+          try{
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+            if(sourceKey !== STORAGE_KEY){
+              localStorage.removeItem(sourceKey);
+            }
+          }catch(e){
+            console.warn("Migration save failed", e);
+          }
+        }
+      }, [defaultPage]);
 
       useEffect(() => {
         const id = setInterval(() => saveState("auto"), 5*60*1000);
@@ -1554,24 +1652,6 @@
 
       const exportPdf = () => {
         window.print();
-      };
-
-      // simple grid overlay lines
-      const Grid = () => {
-        const lines = [];
-        for(let i=1;i<12;i++){
-          const x = (i/12)*1024;
-          lines.push(<line key={"vx"+i} x1={x} y1={0} x2={x} y2={720} className={i%3===0 ? "major" : ""} />);
-        }
-        for(let j=1;j<8;j++){
-          const y = (j/8)*720;
-          lines.push(<line key={"hy"+j} x1={0} y1={y} x2={1024} y2={y} className={j%2===0 ? "major" : ""} />);
-        }
-        return (
-          <svg className="sheetGrid" width="1024" height="720" viewBox="0 0 1024 720">
-            {lines}
-          </svg>
-        );
       };
 
       // header summary
@@ -2299,7 +2379,7 @@
                       </>
                     )}
                   </div>
-                  <div className="printFoot">Generated with TitanMoisture v0.2</div>
+                  <div className="printFoot">Generated with TitanMoisture v1.0</div>
                 </div>
               );
             })}
