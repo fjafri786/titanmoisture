@@ -30,8 +30,9 @@
       /* Moisture accents (still on-brand) */
       --c-aoi: var(--c-obs);      /* Areas of Interest = purple */
       --c-read: var(--c-ds);      /* Readings = blue */
-      --c-src: var(--c-wind);     /* Suspected source = green */
       --c-note: var(--c-apt);     /* General note = charcoal */
+      --c-line: rgba(37,99,235,0.7);
+      --c-drain: rgba(100,116,139,0.7);
 
       --teal:#0BA7A5;
 
@@ -57,9 +58,12 @@
 
     .app{
       display:grid;
-      grid-template-columns: 1fr minmax(320px, 420px);
+      grid-template-columns: 1fr var(--panel-width, minmax(320px, 420px));
       height:100vh;
       min-height:100vh;
+    }
+    .app.panelCollapsed{
+      --panel-width: 32px;
     }
 
     /* ========= CANVAS ZONE ========= */
@@ -202,7 +206,6 @@
     }
     .toolBtn.aoi{ --toolColor: var(--c-aoi); }
     .toolBtn.read{ --toolColor: var(--c-read); }
-    .toolBtn.src{ --toolColor: var(--c-src); }
     .toolBtn.note{ --toolColor: var(--c-note); }
 
     .lockIcon{
@@ -290,6 +293,21 @@
       position:relative;
       min-width: 0;
       height: 100vh;
+      transition: width 0.2s ease, transform 0.2s ease;
+      overflow: hidden;
+    }
+    .panel.collapsed{
+      width: 32px;
+      min-width: 32px;
+    }
+    .panelContent{
+      display:flex;
+      flex-direction:column;
+      height: 100%;
+    }
+    .panel.collapsed .panelContent{
+      opacity: 0;
+      pointer-events: none;
     }
 
     .pHeader{
@@ -317,6 +335,9 @@
       line-height:1.15;
       white-space:normal;
       overflow-wrap:break-word;
+      display:flex;
+      align-items:center;
+      gap:8px;
     }
     .hdrLine2, .hdrLine3{
       margin-top:6px;
@@ -336,6 +357,8 @@
     }
     .hdrBtn{
       padding:8px 10px;
+      min-width: 110px;
+      height: 36px;
       border-radius:12px;
       border:1px solid rgba(255,255,255,0.32);
       background: rgba(255,255,255,0.16);
@@ -344,12 +367,58 @@
       font-weight:1200;
       cursor:pointer;
       white-space:nowrap;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+    }
+    .hdrBtn.danger{
+      border-color: rgba(254,226,226,0.55);
+      background: rgba(239,68,68,0.22);
+    }
+    .hdrBtn.iconOnly{
+      min-width: 36px;
+      width: 36px;
+      padding: 8px;
+    }
+    .hdrIconInline{
+      width: 28px;
+      height: 28px;
+      min-width: 28px;
+      padding: 0;
+      border-radius: 10px;
+      border:1px solid rgba(255,255,255,0.35);
+      background: rgba(255,255,255,0.18);
+      color:#fff;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      cursor:pointer;
+    }
+    .panelToggle{
+      position:absolute;
+      top: 18px;
+      left: -16px;
+      width: 32px;
+      height: 32px;
+      border-radius: 999px;
+      border:1px solid rgba(226,232,240,0.95);
+      background:#fff;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      box-shadow: var(--shadowSoft);
+      cursor:pointer;
+      z-index: 10;
     }
     .hdrSaveMeta{
       font-size:11px;
       color: rgba(255,255,255,0.85);
       text-align:center;
       min-height: 12px;
+    }
+    .hdrSaveMeta.error{
+      color: rgba(254,226,226,0.95);
     }
     .pScroll{
       flex:1;
@@ -368,6 +437,16 @@
       padding:12px;
       box-shadow: var(--shadowSoft);
       min-width:0;
+    }
+    .card.editCard{
+      background: rgba(30,64,175,0.12);
+      border-color: rgba(37,99,235,0.4);
+    }
+    .card.editCard .inp,
+    .card.editCard select,
+    .card.editCard textarea{
+      background: rgba(255,255,255,0.85);
+      border-color: rgba(37,99,235,0.35);
     }
     .lbl{
       display:block;
@@ -465,8 +544,8 @@
     }
     .groupHeader.aoi{ border-color: rgba(147,51,234,0.3); background: rgba(147,51,234,0.08); color:#6B21A8; }
     .groupHeader.read{ border-color: rgba(37,99,235,0.3); background: rgba(37,99,235,0.08); color:#1E40AF; }
-    .groupHeader.src{ border-color: rgba(22,163,74,0.3); background: rgba(22,163,74,0.08); color:#166534; }
     .groupHeader.note{ border-color: rgba(17,24,39,0.2); background: rgba(17,24,39,0.06); color:#111827; }
+    .groupHeader.line{ border-color: rgba(37,99,235,0.35); background: rgba(37,99,235,0.12); color:#1E40AF; }
 
     .itemRow{
       display:flex;
@@ -540,7 +619,6 @@
     }
     .marker.aoi{ background: var(--c-aoi); border-radius: 14px; }
     .marker.read{ background: var(--c-read); border-radius: 999px; }
-    .marker.src{ background: var(--c-src); border-radius: 10px; }
     .marker.note{ background: var(--c-note); border-radius: 999px; }
     .marker.selected{
       outline: 3px solid rgba(11,167,165,0.45);
@@ -586,10 +664,39 @@
       pointer-events: all;
       cursor: pointer;
     }
+    .lineStroke{
+      stroke: var(--c-line);
+      stroke-width: 4;
+      stroke-linecap: round;
+      stroke-dasharray: 0;
+      pointer-events: stroke;
+    }
+    .lineStroke.drain{
+      stroke: var(--c-drain);
+    }
+    .lineLabel{
+      position:absolute;
+      transform: translate(-50%,-50%);
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(37,99,235,0.9);
+      color:#fff;
+      font-weight:1200;
+      font-size:10px;
+      border:2px solid rgba(255,255,255,0.92);
+      box-shadow: 0 8px 14px rgba(2,6,23,0.18);
+      user-select:none;
+      cursor: pointer;
+    }
+    .lineLabel.drain{ background: rgba(100,116,139,0.9); }
+    .lineLabel.selected{
+      outline: 3px solid rgba(11,167,165,0.45);
+      outline-offset: 2px;
+    }
 
     /* Responsive */
     @media (max-width: 980px){
-      .app{ grid-template-columns: 1fr minmax(300px, 360px); }
+      .app{ grid-template-columns: 1fr var(--panel-width, minmax(300px, 360px)); }
     }
     @media (max-width: 820px){
       .app{ grid-template-columns: 1fr; }
@@ -687,18 +794,25 @@
         border-radius:18px;
         padding: 12px;
         margin-bottom: 18px;
+        page-break-inside: avoid;
       }
       .printSheet{
         width: 100%;
         aspect-ratio: 1024 / 720;
         position:relative;
-        overflow:hidden;
+        overflow: visible;
         border-radius:14px;
         border:1px solid rgba(148,163,184,0.4);
+        background:#fff;
       }
       .printList{
         margin-top: 12px;
         font-size:12px;
+      }
+      .printGrid{
+        display:grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap:10px;
       }
       .printList h4{
         margin: 0 0 8px 0;
@@ -713,6 +827,7 @@
         border-radius:10px;
         margin-bottom:8px;
         background:#F8FAFC;
+        break-inside: avoid;
       }
       .printFoot{
         margin-top: 10px;
@@ -770,6 +885,21 @@
       if(name === "pencil"){
         return (<svg {...common}><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>);
       }
+      if(name === "save"){
+        return (<svg {...common}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>);
+      }
+      if(name === "export"){
+        return (<svg {...common}><path d="M12 5v10"/><path d="M8 9l4-4 4 4"/><path d="M20 21H4"/></svg>);
+      }
+      if(name === "trash"){
+        return (<svg {...common}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>);
+      }
+      if(name === "chevLeft"){
+        return (<svg {...common}><path d="M15 18l-6-6 6-6"/></svg>);
+      }
+      if(name === "chevRight"){
+        return (<svg {...common}><path d="M9 18l6-6-6-6"/></svg>);
+      }
       return null;
     };
 
@@ -791,21 +921,6 @@
       "Musty odor noted",
       "Other"
     ];
-    const SUSPECTED_SOURCES = [
-      "Roof / flashing pathway",
-      "Window / door opening",
-      "Plumbing supply line",
-      "Plumbing drain / trap",
-      "Drain / cleanout",
-      "Vent stack / roof vent",
-      "HVAC condensate / air handler",
-      "Water heater pan/line",
-      "Appliance line (ice maker, washer)",
-      "Interior plumbing fixture",
-      "Exterior cladding / weep / flashing",
-      "Condensation / humidity",
-      "Unknown / to be determined"
-    ];
     const INSTRUMENTS = ["Pin meter", "Pinless meter", "IR camera", "Hygrometer", "Other/Unknown"];
 
     function App(){
@@ -814,7 +929,7 @@
       const sheetRef = useRef(null);
       const toolbarRef = useRef(null);
 
-      const [tool, setTool] = useState("aoi"); // aoi | area | read | src | note | pan
+      const [tool, setTool] = useState("aoi"); // aoi | area | read | line | note | pan
       const [selectedId, setSelectedId] = useState(null);
 
       const [toolbarPos, setToolbarPos] = useState({ x: 20, y: 80 });
@@ -824,7 +939,9 @@
 
       const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
       const [lastSavedAt, setLastSavedAt] = useState(null);
+      const [saveError, setSaveError] = useState(null);
       const [isMobile, setIsMobile] = useState(window.innerWidth <= 820);
+      const [panelCollapsed, setPanelCollapsed] = useState(false);
 
       // Header / project meta
       const [hdrCollapsed, setHdrCollapsed] = useState(true);
@@ -842,9 +959,11 @@
       const [activePageId, setActivePageId] = useState(defaultPage.id);
 
       // items
-      const counts = useRef({ aoi:1, area:1, read:1, src:1, note:1 });
+      const counts = useRef({ aoi:1, area:1, read:1, line:1, note:1 });
       const [items, setItems] = useState([]);
       const [draftPolygon, setDraftPolygon] = useState(null);
+      const [draftLine, setDraftLine] = useState(null);
+      const suppressClickRef = useRef(false);
 
       // view (pan/zoom + pinch)
       const [view, setView] = useState({ scale: 1.0, tx: 0, ty: 0 });
@@ -852,14 +971,20 @@
 
       useEffect(() => {
         if(!isMobile) setMobilePanelOpen(false);
+        if(isMobile) setPanelCollapsed(false);
       }, [isMobile]);
 
       useEffect(() => {
         if(tool !== "area") setDraftPolygon(null);
+        if(tool !== "line") setDraftLine(null);
+        if(tool === "line"){
+          setDraftLine(prev => (prev && prev.pageId !== activePageId ? null : prev));
+        }
       }, [tool, activePageId]);
 
       const activeItem = items.find(i => i.id === selectedId) || null;
       const activePage = pages.find(p => p.id === activePageId) || pages[0];
+      const activePageIndex = pages.findIndex(p => p.id === activePageId);
       const activeItems = useMemo(() => items.filter(i => i.pageId === activePage?.id), [items, activePage]);
 
       // ===== persistence =====
@@ -889,7 +1014,9 @@
         try{
           localStorage.setItem(STORAGE_KEY, JSON.stringify(buildState()));
           setLastSavedAt({ source, time: new Date().toLocaleTimeString() });
+          setSaveError(null);
         }catch(e){
+          setSaveError("Save failed (storage limit). Try removing large backgrounds or photos.");
           console.warn("Save failed", e);
         }
       }, [buildState]);
@@ -920,15 +1047,18 @@
           if(Array.isArray(s.items)){
             const revived = s.items.map(it => ({
               ...it,
+              type: it.type === "src" ? "note" : it.type,
               pageId: it.pageId || fallbackPageId,
+              locked: it.locked ?? false,
               data: {
                 ...it.data,
+                lineType: it.data?.lineType || "plumbing",
                 photo: it.data?.photo?.dataUrl ? reviveFileObj(it.data.photo) : null
               }
             }));
             setItems(revived);
           }
-          if(s.counts) counts.current = { aoi:1, area:1, read:1, src:1, note:1, ...s.counts };
+          if(s.counts) counts.current = { aoi:1, area:1, read:1, line:1, note:1, ...s.counts };
         }catch(e){
           console.warn("Restore failed", e);
         }
@@ -1050,13 +1180,13 @@
             instrument: "Pin meter",
             reading: "",
             units: "WME",
-            suspectedSource: "Unknown / to be determined",
-            pathwayNotes: "",
             tags: "",
             notes: "",
             photo: null,
-            photoCaption: ""
-          }
+            photoCaption: "",
+            lineType: "plumbing"
+          },
+          locked: false
         };
 
         if(type === "aoi"){
@@ -1071,18 +1201,18 @@
           base.name = `MR-${n}`;
           base.data = { ...base.data, condition: "Moisture staining (spot)", notes: "Document reading location, substrate, and instrument type/model." };
         }
-        if(type === "src"){
-          base.name = `SRC-${n}`;
-          base.data = { ...base.data, suspectedSource: "Roof / flashing pathway", notes: "Describe suspected pathway/cause and rationale. Identify needed follow-up." };
-        }
         if(type === "note"){
           base.name = `NOTE-${n}`;
           base.data = { ...base.data, elevation:"Other", condition:"Other", notes: "General note (odors, occupant statements, recent repairs, environmental conditions, etc.)." };
         }
+        if(type === "line"){
+          base.name = `LINE-${n}`;
+          base.data = { ...base.data, elevation:"Other", condition:"Other", notes: "Line annotation for plumbing or drain routing." };
+        }
         return base;
       };
 
-      const markerColorClass = (t) => (t === "aoi" ? "aoi" : t === "read" ? "read" : t === "src" ? "src" : "note");
+      const markerColorClass = (t) => (t === "aoi" ? "aoi" : t === "read" ? "read" : "note");
 
       const polygonCenter = (points) => {
         if(!points?.length) return { x: 0.5, y: 0.5 };
@@ -1090,12 +1220,23 @@
         return { x: sum.x / points.length, y: sum.y / points.length };
       };
 
+      const lineMidpoint = (line) => ({
+        x: (line.x1 + line.x2) / 2,
+        y: (line.y1 + line.y2) / 2
+      });
+
       const addAtClick = (e) => {
+        if(suppressClickRef.current){
+          suppressClickRef.current = false;
+          return;
+        }
         if(tool === "pan") return;
         const hitMarker = e.target.closest("[data-marker-id]");
         const hitArea = e.target.closest(".areaLabel") || e.target.closest(".areaPolyClickable");
+        const hitLine = e.target.closest("[data-line-id]");
         if(hitMarker) return;
         if(hitArea) return;
+        if(hitLine) return;
         const p = clientToSheet(e.clientX, e.clientY);
         if(!p) return;
         if(tool === "area"){
@@ -1105,6 +1246,21 @@
             }
             return { ...prev, points: [...prev.points, p] };
           });
+          return;
+        }
+        if(tool === "line"){
+          if(!draftLine || draftLine.pageId !== activePageId){
+            setDraftLine({ pageId: activePageId, start: p, end: p });
+            return;
+          }
+          const it = {
+            ...createItem("line", p),
+            line: { x1: draftLine.start.x, y1: draftLine.start.y, x2: p.x, y2: p.y }
+          };
+          setItems(prev => [...prev, it]);
+          setSelectedId(it.id);
+          setDraftLine(null);
+          if(isMobile) setMobilePanelOpen(true);
           return;
         }
         const it = createItem(tool, p);
@@ -1125,19 +1281,60 @@
 
       const cancelPolygon = () => setDraftPolygon(null);
 
+      const finishLine = () => {
+        if(!draftLine?.start || !draftLine?.end) return;
+        const it = {
+          ...createItem("line", draftLine.end),
+          line: { x1: draftLine.start.x, y1: draftLine.start.y, x2: draftLine.end.x, y2: draftLine.end.y }
+        };
+        setItems(prev => [...prev, it]);
+        setSelectedId(it.id);
+        setDraftLine(null);
+        if(isMobile) setMobilePanelOpen(true);
+      };
+
+      const cancelLine = () => setDraftLine(null);
+
       const onPointerDown = (e) => {
         const markerEl = e.target.closest("[data-marker-id]");
         if(markerEl){
           const id = markerEl.getAttribute("data-marker-id");
+          const item = items.find(i => i.id === id);
+          suppressClickRef.current = true;
           setSelectedId(id);
+          if(item?.locked) return;
           if(tool === "pan") {
             // allow pan even if pressing marker? keep pan on viewport background only
           } else {
             // drag marker
             e.preventDefault();
-            setDrag({ mode:"move", id, sx:e.clientX, sy:e.clientY });
+            setDrag({ mode:"move", id, sx:e.clientX, sy:e.clientY, moved:false });
             try{ e.currentTarget.setPointerCapture(e.pointerId); }catch{}
           }
+          return;
+        }
+        const areaEl = e.target.closest(".areaLabel") || e.target.closest(".areaPolyClickable");
+        if(areaEl){
+          const id = areaEl.getAttribute("data-area-id") || areaEl.getAttribute("data-marker-id");
+          const item = items.find(i => i.id === id);
+          suppressClickRef.current = true;
+          setSelectedId(id);
+          if(item?.locked) return;
+          e.preventDefault();
+          setDrag({ mode:"moveArea", id, sx:e.clientX, sy:e.clientY, points: item?.points || [], moved:false });
+          try{ e.currentTarget.setPointerCapture(e.pointerId); }catch{}
+          return;
+        }
+        const lineEl = e.target.closest("[data-line-id]");
+        if(lineEl){
+          const id = lineEl.getAttribute("data-line-id");
+          const item = items.find(i => i.id === id);
+          suppressClickRef.current = true;
+          setSelectedId(id);
+          if(item?.locked) return;
+          e.preventDefault();
+          setDrag({ mode:"moveLine", id, sx:e.clientX, sy:e.clientY, line: item?.line, moved:false });
+          try{ e.currentTarget.setPointerCapture(e.pointerId); }catch{}
           return;
         }
 
@@ -1149,11 +1346,27 @@
       };
 
       const onPointerMove = (e) => {
-        if(!drag) return;
+        if(!drag){
+          if(draftLine && tool === "line"){
+            const p = clientToSheet(e.clientX, e.clientY);
+            if(p){
+              setDraftLine(prev => prev ? ({ ...prev, end: p }) : prev);
+            }
+          }
+          return;
+        }
         if(drag.mode === "pan"){
+          if(!drag.moved && (Math.abs(e.clientX - drag.sx) > 2 || Math.abs(e.clientY - drag.sy) > 2)){
+            setDrag(prev => prev ? ({ ...prev, moved:true }) : prev);
+            suppressClickRef.current = true;
+          }
           setView(prev => ({ ...prev, tx: drag.ox + (e.clientX - drag.sx), ty: drag.oy + (e.clientY - drag.sy) }));
         }
         if(drag.mode === "move"){
+          if(!drag.moved && (Math.abs(e.clientX - drag.sx) > 2 || Math.abs(e.clientY - drag.sy) > 2)){
+            setDrag(prev => prev ? ({ ...prev, moved:true }) : prev);
+            suppressClickRef.current = true;
+          }
           const v = viewportRef.current?.getBoundingClientRect();
           if(!v) return;
           const sheetW = 1024, sheetH = 720;
@@ -1172,6 +1385,53 @@
           }));
           // update drag start so movement feels stable
           setDrag(d => d ? ({ ...d, sx:e.clientX, sy:e.clientY }) : d);
+        }
+        if(drag.mode === "moveArea"){
+          if(!drag.moved && (Math.abs(e.clientX - drag.sx) > 2 || Math.abs(e.clientY - drag.sy) > 2)){
+            setDrag(prev => prev ? ({ ...prev, moved:true }) : prev);
+            suppressClickRef.current = true;
+          }
+          const v = viewportRef.current?.getBoundingClientRect();
+          if(!v) return;
+          const sheetW = 1024, sheetH = 720;
+          const dxClient = e.clientX - drag.sx;
+          const dyClient = e.clientY - drag.sy;
+          const dxSheet = dxClient / view.scale / sheetW;
+          const dySheet = dyClient / view.scale / sheetH;
+          setItems(prev => prev.map(it => {
+            if(it.id !== drag.id) return it;
+            if(!Array.isArray(it.points)) return it;
+            const movedPoints = drag.points.map(p => ({
+              x: clamp(p.x + dxSheet, 0, 1),
+              y: clamp(p.y + dySheet, 0, 1)
+            }));
+            return { ...it, points: movedPoints };
+          }));
+        }
+        if(drag.mode === "moveLine"){
+          if(!drag.moved && (Math.abs(e.clientX - drag.sx) > 2 || Math.abs(e.clientY - drag.sy) > 2)){
+            setDrag(prev => prev ? ({ ...prev, moved:true }) : prev);
+            suppressClickRef.current = true;
+          }
+          const v = viewportRef.current?.getBoundingClientRect();
+          if(!v || !drag.line) return;
+          const sheetW = 1024, sheetH = 720;
+          const dxClient = e.clientX - drag.sx;
+          const dyClient = e.clientY - drag.sy;
+          const dxSheet = dxClient / view.scale / sheetW;
+          const dySheet = dyClient / view.scale / sheetH;
+          setItems(prev => prev.map(it => {
+            if(it.id !== drag.id || !it.line) return it;
+            return {
+              ...it,
+              line: {
+                x1: clamp(drag.line.x1 + dxSheet, 0, 1),
+                y1: clamp(drag.line.y1 + dySheet, 0, 1),
+                x2: clamp(drag.line.x2 + dxSheet, 0, 1),
+                y2: clamp(drag.line.y2 + dySheet, 0, 1)
+              }
+            };
+          }));
         }
       };
 
@@ -1205,12 +1465,12 @@
       };
 
       const group = useMemo(() => {
-        const g = { aoi: [], area: [], read: [], src: [], note: [] };
+        const g = { aoi: [], area: [], read: [], line: [], note: [] };
         activeItems.forEach(it => g[it.type]?.push(it));
         return g;
       }, [activeItems]);
 
-      const [groupOpen, setGroupOpen] = useState({ aoi:true, area:true, read:true, src:true, note:true });
+      const [groupOpen, setGroupOpen] = useState({ aoi:true, area:true, read:true, line:true, note:true });
 
       const addPage = () => {
         const nextIndex = pages.length + 1;
@@ -1245,6 +1505,24 @@
         setSelectedId(null);
       };
 
+      const goPrevPage = () => {
+        if(activePageIndex <= 0) return;
+        const prevPage = pages[activePageIndex - 1];
+        if(prevPage){
+          setActivePageId(prevPage.id);
+          setSelectedId(null);
+        }
+      };
+
+      const goNextPage = () => {
+        if(activePageIndex < 0 || activePageIndex >= pages.length - 1) return;
+        const nextPage = pages[activePageIndex + 1];
+        if(nextPage){
+          setActivePageId(nextPage.id);
+          setSelectedId(null);
+        }
+      };
+
       const deleteActive = () => {
         if(!selectedId) return;
         setItems(prev => prev.filter(i => i.id !== selectedId));
@@ -1257,9 +1535,10 @@
         setSelectedId(null);
         setPages([defaultPage]);
         setActivePageId(defaultPage.id);
-        counts.current = { aoi:1, area:1, read:1, src:1, note:1 };
+        counts.current = { aoi:1, area:1, read:1, line:1, note:1 };
         localStorage.removeItem(STORAGE_KEY);
         setLastSavedAt(null);
+        setSaveError(null);
       };
 
       const setActivePhoto = async (file) => {
@@ -1298,11 +1577,11 @@
       // header summary
       const metaLine2 = `${eventContext}${inspectionDate ? " • " + inspectionDate : ""}`;
       const metaLine3 = `${propertyCity}`;
-      const typeLabels = { aoi: "AOI Marker", area: "AOI Area", read: "Moisture Reading", src: "Source/Pathway", note: "Note" };
+      const typeLabels = { aoi: "AOI Marker", area: "AOI Area", read: "Moisture Reading", line: "Line", note: "Note" };
 
       return (
         <>
-          <div className="app">
+          <div className={"app" + (panelCollapsed ? " panelCollapsed" : "")}>
           {/* canvas */}
           <div className="canvasZone">
             <div
@@ -1320,7 +1599,7 @@
                   <button className={"toolBtn aoi expanded" + (tool==="aoi" ? " active" : "")} onClick={() => setTool("aoi")}><span className="toolText">AOI</span></button>
                   <button className={"toolBtn aoi expanded" + (tool==="area" ? " active" : "")} onClick={() => setTool("area")}><span className="toolText">AREA</span></button>
                   <button className={"toolBtn read expanded" + (tool==="read" ? " active" : "")} onClick={() => setTool("read")}><span className="toolText">MR</span></button>
-                  <button className={"toolBtn src expanded" + (tool==="src" ? " active" : "")} onClick={() => setTool("src")}><span className="toolText">SRC</span></button>
+                  <button className={"toolBtn read expanded" + (tool==="line" ? " active" : "")} style={{"--toolColor":"var(--c-ds)"}} onClick={() => setTool("line")}><span className="toolText">LINE</span></button>
                   <button className={"toolBtn note expanded" + (tool==="note" ? " active" : "")} onClick={() => setTool("note")}><span className="toolText">NOTE</span></button>
                   <div className="tbDivider"></div>
                   <button className={"toolBtn note expanded" + (tool==="pan" ? " active" : "")} style={{"--toolColor":"var(--navy)"}}
@@ -1331,6 +1610,16 @@
                         <span className="toolText">Finish</span>
                       </button>
                       <button className={"toolBtn note expanded"} style={{"--toolColor":"var(--c-apt)"}} onClick={cancelPolygon}>
+                        <span className="toolText">Cancel</span>
+                      </button>
+                    </>
+                  )}
+                  {tool === "line" && (
+                    <>
+                      <button className={"toolBtn read expanded"} disabled={!draftLine?.start || !draftLine?.end} onClick={finishLine}>
+                        <span className="toolText">Finish</span>
+                      </button>
+                      <button className={"toolBtn note expanded"} style={{"--toolColor":"var(--c-apt)"}} onClick={cancelLine}>
                         <span className="toolText">Cancel</span>
                       </button>
                     </>
@@ -1354,7 +1643,7 @@
                   <div className="zReadout">{Math.round(view.scale*100)}%</div>
                 </div>
                 <div className="hint">
-                  Tap to place: <b>AOI</b> (purple), <b>AREA</b> polygons, <b>MR</b> readings (blue), <b>SRC</b> pathways (green), <b>NOTE</b> (charcoal). Use <b>PAN</b> to move the sheet. Double-tap or click Finish to close a polygon.
+                  Tap to place: <b>AOI</b> (purple), <b>AREA</b> polygons, <b>MR</b> readings (blue), <b>LINE</b> runs (blue/gray), <b>NOTE</b> (charcoal). Use <b>PAN</b> to move the sheet. Double-tap or click Finish to close a polygon.
                 </div>
               </div>
             </div>
@@ -1387,6 +1676,19 @@
                         key={it.id}
                         className="areaPoly areaPolyClickable"
                         points={it.points.map(p => `${p.x*1024},${p.y*720}`).join(" ")}
+                        data-area-id={it.id}
+                        onClick={(e) => { e.stopPropagation(); setSelectedId(it.id); if(isMobile) setMobilePanelOpen(true); }}
+                      />
+                    ))}
+                    {activeItems.filter(it => it.type === "line" && it.line).map(it => (
+                      <line
+                        key={it.id}
+                        className={`lineStroke ${it.data.lineType === "drain" ? "drain" : ""}`}
+                        x1={it.line.x1*1024}
+                        y1={it.line.y1*720}
+                        x2={it.line.x2*1024}
+                        y2={it.line.y2*720}
+                        data-line-id={it.id}
                         onClick={(e) => { e.stopPropagation(); setSelectedId(it.id); if(isMobile) setMobilePanelOpen(true); }}
                       />
                     ))}
@@ -1401,6 +1703,15 @@
                         ))}
                       </>
                     )}
+                    {draftLine?.pageId === activePageId && draftLine.start && draftLine.end && (
+                      <line
+                        className="lineStroke"
+                        x1={draftLine.start.x*1024}
+                        y1={draftLine.start.y*720}
+                        x2={draftLine.end.x*1024}
+                        y2={draftLine.end.y*720}
+                      />
+                    )}
                   </svg>
 
                   {activeItems.filter(it => it.type === "area" && Array.isArray(it.points)).map(it => {
@@ -1410,6 +1721,7 @@
                         key={`${it.id}-label`}
                         className={"areaLabel" + (it.id === selectedId ? " selected" : "")}
                         style={{ left: `${center.x*100}%`, top: `${center.y*100}%` }}
+                        data-area-id={it.id}
                         onClick={(e) => { e.stopPropagation(); setSelectedId(it.id); if(isMobile) setMobilePanelOpen(true); }}
                       >
                         {it.name}
@@ -1417,7 +1729,22 @@
                     );
                   })}
 
-                  {activeItems.filter(it => it.type !== "area").map(it => (
+                  {activeItems.filter(it => it.type === "line" && it.line).map(it => {
+                    const mid = lineMidpoint(it.line);
+                    return (
+                      <div
+                        key={`${it.id}-line-label`}
+                        className={`lineLabel ${it.data.lineType === "drain" ? "drain" : ""}` + (it.id === selectedId ? " selected" : "")}
+                        style={{ left: `${mid.x*100}%`, top: `${mid.y*100}%` }}
+                        data-line-id={it.id}
+                        onClick={(e) => { e.stopPropagation(); setSelectedId(it.id); if(isMobile) setMobilePanelOpen(true); }}
+                      >
+                        {it.name}
+                      </div>
+                    );
+                  })}
+
+                  {activeItems.filter(it => it.type !== "area" && it.type !== "line").map(it => (
                     <div
                       key={it.id}
                       data-marker-id={it.id}
@@ -1446,39 +1773,53 @@
           </div>
 
           {/* sidebar */}
-          <div className={"panel" + (isMobile && mobilePanelOpen ? " mobileOpen" : "")}>
-            <div className="pHeader">
-              <div>
-                <div className="hdrLine0">TitanMoisture • Version 0.2</div>
-                <div className="hdrLine1">{projectName}</div>
-                {!hdrCollapsed && (
-                  <>
-                    <div className="hdrLine2">{metaLine2}</div>
-                    <div className="hdrLine3">{metaLine3}</div>
-                  </>
-                )}
-              </div>
+          <div className={"panel" + (panelCollapsed ? " collapsed" : "") + (isMobile && mobilePanelOpen ? " mobileOpen" : "")}>
+            {!isMobile && (
+              <button className="panelToggle" onClick={() => setPanelCollapsed(v => !v)} title={panelCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
+                <Icon name={panelCollapsed ? "chevLeft" : "chevRight"} />
+              </button>
+            )}
+            <div className="panelContent">
+              <div className="pHeader">
+                <div>
+                  <div className="hdrLine0">TitanMoisture • Version 0.2</div>
+                  <div className="hdrLine1">
+                    <span>{projectName}</span>
+                    <button className="hdrIconInline" onClick={() => setHdrCollapsed(v => !v)} title={hdrCollapsed ? "Expand details" : "Collapse details"}>
+                      <Icon name={hdrCollapsed ? "chevDown" : "chevUp"} />
+                    </button>
+                  </div>
+                  {!hdrCollapsed && (
+                    <>
+                      <div className="hdrLine2">{metaLine2}</div>
+                      <div className="hdrLine3">{metaLine3}</div>
+                    </>
+                  )}
+                </div>
 
-              <div className="hdrActions">
-                {isMobile && <button className="hdrBtn" onClick={() => setMobilePanelOpen(false)}>Close</button>}
-                <button className="hdrBtn" onClick={() => setHdrCollapsed(v => !v)}>
-                  {hdrCollapsed ? "Expand" : "Collapse"}
-                </button>
-                <button className="hdrBtn" onClick={() => setHdrEditOpen(v => !v)}>
-                  <span style={{display:"inline-flex", alignItems:"center", gap:8}}><Icon name="pencil" /> Edit</span>
-                </button>
-                <button className="hdrBtn" onClick={() => saveState("manual")}>Save</button>
-                <button className="hdrBtn" onClick={exportPdf}>Export PDF</button>
-                <button className="hdrBtn" onClick={clearAll}>Reset</button>
-                <div className="hdrSaveMeta">
-                  {lastSavedAt ? `${lastSavedAt.source === "auto" ? "Auto saved" : "Last saved"} ${lastSavedAt.time}` : "Not saved yet"}
+                <div className="hdrActions">
+                  {isMobile && <button className="hdrBtn" onClick={() => setMobilePanelOpen(false)}>Close</button>}
+                  <button className="hdrBtn" onClick={() => setHdrEditOpen(v => !v)}>
+                    <Icon name="pencil" /> {hdrEditOpen ? "Done" : "Edit"}
+                  </button>
+                  <button className="hdrBtn" onClick={() => saveState("manual")}>
+                    <Icon name="save" /> Save
+                  </button>
+                  <button className="hdrBtn" onClick={exportPdf}>
+                    <Icon name="export" /> Export
+                  </button>
+                  <button className="hdrBtn danger" onClick={clearAll}>
+                    <Icon name="trash" /> Reset
+                  </button>
+                  <div className={"hdrSaveMeta" + (saveError ? " error" : "")}>
+                    {saveError || (lastSavedAt ? `${lastSavedAt.source === "auto" ? "Auto saved" : "Last saved"} ${lastSavedAt.time}` : "Not saved yet")}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="pScroll">
+              <div className="pScroll">
               {hdrEditOpen && (
-                <div className="card">
+                <div className="card editCard">
                   <div className="lbl">Project header</div>
                   <label className="lbl" style={{marginTop:10}}>Project / Residence name</label>
                   <input className="inp" value={projectName} onChange={(e)=>setProjectName(e.target.value)} />
@@ -1538,17 +1879,20 @@
                   const v = e.target.value;
                   setPages(prev => prev.map(p => p.id === activePageId ? ({ ...p, name: v }) : p));
                 }} />
-                <div className="row" style={{marginTop:10, flexWrap:"wrap"}}>
-                  {pages.map(page => (
-                    <button
-                      key={page.id}
-                      className="btn"
-                      style={{borderColor: page.id === activePageId ? "rgba(11,167,165,0.5)" : undefined, background: page.id === activePageId ? "rgba(11,167,165,0.08)" : undefined}}
-                      onClick={() => { setActivePageId(page.id); setSelectedId(null); }}
-                    >
-                      {page.name || "Untitled"}
-                    </button>
-                  ))}
+                <div className="row" style={{marginTop:10}}>
+                  <button className="btn" onClick={goPrevPage} disabled={activePageIndex <= 0}>Prev</button>
+                  <select
+                    className="inp"
+                    value={activePageId}
+                    onChange={(e) => { setActivePageId(e.target.value); setSelectedId(null); }}
+                  >
+                    {pages.map(page => (
+                      <option key={page.id} value={page.id}>
+                        {page.name || "Untitled"}
+                      </option>
+                    ))}
+                  </select>
+                  <button className="btn" onClick={goNextPage} disabled={activePageIndex >= pages.length - 1}>Next</button>
                 </div>
                 <div className="row" style={{marginTop:10}}>
                   <button className="btn btnPrimary" onClick={addPage}>Add Page</button>
@@ -1623,21 +1967,21 @@
                 </div>
 
                 <div style={{marginTop:12}}>
-                  <div className={"groupHeader src"} onClick={() => setGroupOpen(s => ({...s, src: !s.src}))}>
+                  <div className={"groupHeader line"} onClick={() => setGroupOpen(s => ({...s, line: !s.line}))}>
                     <div className="groupTitle">
-                      SRC (Suspected Source / Pathway)
-                      <span className="groupCount">{group.src.length}</span>
+                      Lines
+                      <span className="groupCount">{group.line.length}</span>
                     </div>
-                    <div className="groupChevron"><Icon name={groupOpen.src ? "chevUp" : "chevDown"} /></div>
+                    <div className="groupChevron"><Icon name={groupOpen.line ? "chevUp" : "chevDown"} /></div>
                   </div>
-                  {groupOpen.src && group.src.map(it => (
-                    <div key={it.id} className={"itemRow" + (it.id===selectedId ? " selected" : "")} style={{borderLeftColor:"var(--c-src)"}}
+                  {groupOpen.line && group.line.map(it => (
+                    <div key={it.id} className={"itemRow" + (it.id===selectedId ? " selected" : "")} style={{borderLeftColor:"var(--c-read)"}}
                          onClick={() => { setSelectedId(it.id); if(isMobile) setMobilePanelOpen(true); }}>
                       <div className="itemInfo">
                         <b>{it.name}</b>
-                        <span>{it.data.room} • {it.data.suspectedSource}</span>
+                        <span>{it.data.room} • {it.data.lineType === "drain" ? "Drain line" : "Plumbing line"}</span>
                       </div>
-                      <span className="badge">SRC</span>
+                      <span className="badge">LINE</span>
                     </div>
                   ))}
                 </div>
@@ -1685,6 +2029,26 @@
                         </select>
                       </div>
                     </div>
+                    <div className="row" style={{marginTop:10}}>
+                      <div>
+                        <label className="lbl">Lock item</label>
+                        <button
+                          className={"btn btnFull " + (activeItem.locked ? "btnDanger" : "btnPrimary")}
+                          onClick={() => setItems(prev => prev.map(i => i.id === activeItem.id ? ({ ...i, locked: !i.locked }) : i))}
+                        >
+                          {activeItem.locked ? "Locked" : "Unlocked"}
+                        </button>
+                      </div>
+                      {activeItem.type === "line" && (
+                        <div>
+                          <label className="lbl">Line type</label>
+                          <select className="inp" value={activeItem.data.lineType} onChange={(e)=>updateActive("lineType", e.target.value)}>
+                            <option value="plumbing">Plumbing line</option>
+                            <option value="drain">Drain line</option>
+                          </select>
+                        </div>
+                      )}
+                    </div>
 
                     <div className="row" style={{marginTop:10}}>
                       <div>
@@ -1700,62 +2064,51 @@
                         </select>
                       </div>
                     </div>
-                    <div style={{marginTop:8, display:"flex", gap:8, flexWrap:"wrap"}}>
-                      {["Ceiling", "Wall", "Floor"].map(option => (
-                        <button key={option} className="btn" onClick={() => updateActive("elevation", option)}>
-                          {option}
-                        </button>
-                      ))}
-                    </div>
+                    {activeItem.type === "read" && (
+                      <>
+                        <div className="row" style={{marginTop:10}}>
+                          <div>
+                            <label className="lbl">Moisture reading</label>
+                            <input className="inp" placeholder="e.g., 18" value={activeItem.data.reading} onChange={(e)=>updateActive("reading", e.target.value)} />
+                          </div>
+                          <div>
+                            <label className="lbl">Units</label>
+                            <select className="inp" value={activeItem.data.units} onChange={(e)=>updateActive("units", e.target.value)}>
+                              <option value="WME">WME</option>
+                              <option value="%">%</option>
+                              <option value="RH">RH</option>
+                              <option value="Temp">Temp</option>
+                              <option value="Other">Other</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="row" style={{marginTop:10}}>
+                          <div>
+                            <label className="lbl">Instrument</label>
+                            <select className="inp" value={activeItem.data.instrument} onChange={(e)=>updateActive("instrument", e.target.value)}>
+                              {INSTRUMENTS.map(x => <option key={x} value={x}>{x}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                      </>
+                    )}
 
                     <div className="row" style={{marginTop:10}}>
-                      <div>
-                        <label className="lbl">Moisture reading</label>
-                        <input className="inp" placeholder="e.g., 18" value={activeItem.data.reading} onChange={(e)=>updateActive("reading", e.target.value)} />
-                      </div>
-                      <div>
-                        <label className="lbl">Units</label>
-                        <select className="inp" value={activeItem.data.units} onChange={(e)=>updateActive("units", e.target.value)}>
-                          <option value="WME">WME</option>
-                          <option value="%">%</option>
-                          <option value="RH">RH</option>
-                          <option value="Temp">Temp</option>
-                          <option value="Other">Other</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="row" style={{marginTop:10}}>
-                      <div>
-                        <label className="lbl">Instrument</label>
-                        <select className="inp" value={activeItem.data.instrument} onChange={(e)=>updateActive("instrument", e.target.value)}>
-                          {INSTRUMENTS.map(x => <option key={x} value={x}>{x}</option>)}
-                        </select>
-                      </div>
                       <div>
                         <label className="lbl">Approx. extent</label>
                         <input className="inp" placeholder='e.g., "2 ft x 3 ft area" / "localized"' value={activeItem.data.extent} onChange={(e)=>updateActive("extent", e.target.value)} />
                       </div>
-                    </div>
-
-                    <div className="row" style={{marginTop:10}}>
                       <div>
                         <label className="lbl">Measurements</label>
                         <input className="inp" placeholder='e.g., "12 in x 18 in" / "4 ft linear"' value={activeItem.data.measurements} onChange={(e)=>updateActive("measurements", e.target.value)} />
                       </div>
-                      <div>
-                        <label className="lbl">Tags</label>
-                        <input className="inp" placeholder="e.g., blistered paint, north wall" value={activeItem.data.tags} onChange={(e)=>updateActive("tags", e.target.value)} />
-                      </div>
                     </div>
 
-                    <label className="lbl" style={{marginTop:10}}>Suspected source / pathway</label>
-                    <select className="inp" value={activeItem.data.suspectedSource} onChange={(e)=>updateActive("suspectedSource", e.target.value)}>
-                      {SUSPECTED_SOURCES.map(x => <option key={x} value={x}>{x}</option>)}
-                    </select>
-
-                    <label className="lbl" style={{marginTop:10}}>Pathway / cause details</label>
-                    <textarea className="inp" value={activeItem.data.pathwayNotes} onChange={(e)=>updateActive("pathwayNotes", e.target.value)} />
+                    <div style={{marginTop:10}}>
+                      <label className="lbl">Tags</label>
+                      <input className="inp" placeholder="e.g., blistered paint, north wall" value={activeItem.data.tags} onChange={(e)=>updateActive("tags", e.target.value)} />
+                    </div>
 
                     <label className="lbl" style={{marginTop:10}}>Notes</label>
                     <textarea className="inp" value={activeItem.data.notes} onChange={(e)=>updateActive("notes", e.target.value)} />
@@ -1791,15 +2144,6 @@
                 )}
               </div>
 
-              {/* quick guidance */}
-              <div className="card">
-                <div className="lbl">Workflow hint</div>
-                <div className="tiny">
-                  Start with <b>AOI</b> markers or <b>AREA</b> polygons to map interior conditions by room/elevation, then place <b>MR</b> at reading locations,
-                  then add one or more <b>SRC</b> markers to document pathways/causes. Use <b>NOTE</b> for occupant statements,
-                  odors, recent repairs, and environmental context. Measurements and captions are critical for objective reporting.
-                </div>
-              </div>
             </div>
           </div>
           </div>
@@ -1807,6 +2151,10 @@
           <div className="printArea">
             {pages.map((page, index) => {
               const pageItems = items.filter(it => it.pageId === page.id);
+              const aoiItems = pageItems.filter(it => it.type === "aoi" || it.type === "area");
+              const readItems = pageItems.filter(it => it.type === "read");
+              const lineItems = pageItems.filter(it => it.type === "line");
+              const noteItems = pageItems.filter(it => it.type === "note");
               return (
                 <div key={page.id} className="printPage">
                   <div className="printHeader">
@@ -1834,6 +2182,16 @@
                             points={it.points.map(p => `${p.x*1024},${p.y*720}`).join(" ")}
                           />
                         ))}
+                        {pageItems.filter(it => it.type === "line" && it.line).map(it => (
+                          <line
+                            key={it.id}
+                            className={`lineStroke ${it.data.lineType === "drain" ? "drain" : ""}`}
+                            x1={it.line.x1*1024}
+                            y1={it.line.y1*720}
+                            x2={it.line.x2*1024}
+                            y2={it.line.y2*720}
+                          />
+                        ))}
                       </svg>
                       {pageItems.filter(it => it.type === "area" && Array.isArray(it.points)).map(it => {
                         const center = polygonCenter(it.points);
@@ -1847,7 +2205,19 @@
                           </div>
                         );
                       })}
-                      {pageItems.filter(it => it.type !== "area").map(it => (
+                      {pageItems.filter(it => it.type === "line" && it.line).map(it => {
+                        const mid = lineMidpoint(it.line);
+                        return (
+                          <div
+                            key={`${it.id}-print-line-label`}
+                            className={`lineLabel ${it.data.lineType === "drain" ? "drain" : ""}`}
+                            style={{ left: `${mid.x*100}%`, top: `${mid.y*100}%` }}
+                          >
+                            {it.name}
+                          </div>
+                        );
+                      })}
+                      {pageItems.filter(it => it.type !== "area" && it.type !== "line").map(it => (
                         <div
                           key={it.id}
                           className={"marker " + markerColorClass(it.type)}
@@ -1863,26 +2233,71 @@
                   <div className="printList">
                     <h4>Observations</h4>
                     {pageItems.length === 0 && <div className="printFoot">No items documented on this page.</div>}
-                    {pageItems.map(it => (
-                      <div key={`${it.id}-summary`} className="printListItem">
-                        <div><b>{it.name}</b> • {typeLabels[it.type] || it.type}</div>
-                        <div>Room/Elevation: {it.data.room} • {it.data.elevation}</div>
-                        <div>Condition: {it.data.condition}</div>
-                        {it.data.measurements && <div>Measurements: {it.data.measurements}</div>}
-                        {it.data.extent && <div>Extent: {it.data.extent}</div>}
-                        {it.data.reading && <div>Reading: {it.data.reading} {it.data.units}</div>}
-                        {it.data.suspectedSource && <div>Source/Pathway: {it.data.suspectedSource}</div>}
-                        {it.data.pathwayNotes && <div>Pathway notes: {it.data.pathwayNotes}</div>}
-                        {it.data.tags && <div>Tags: {it.data.tags}</div>}
-                        {it.data.notes && <div>Notes: {it.data.notes}</div>}
-                        {it.data.photoCaption && <div>Photo caption: {it.data.photoCaption}</div>}
-                        {it.data.photo?.url && (
-                          <div style={{marginTop:8}}>
-                            <img src={it.data.photo.url} alt={it.name} style={{width:"160px", borderRadius:10, border:"1px solid rgba(148,163,184,0.45)"}} />
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                    {pageItems.length > 0 && (
+                      <>
+                        <h4>Areas of Interest</h4>
+                        <div className="printGrid">
+                          {aoiItems.map(it => (
+                            <div key={`${it.id}-summary`} className="printListItem">
+                              <div><b>{it.name}</b> • {typeLabels[it.type] || it.type}</div>
+                              <div>Room/Elevation: {it.data.room} • {it.data.elevation}</div>
+                              <div>Condition: {it.data.condition}</div>
+                              {it.data.measurements && <div>Measurements: {it.data.measurements}</div>}
+                              {it.data.extent && <div>Extent: {it.data.extent}</div>}
+                              {it.data.tags && <div>Tags: {it.data.tags}</div>}
+                              {it.data.notes && <div>Notes: {it.data.notes}</div>}
+                              {it.data.photoCaption && <div>Photo caption: {it.data.photoCaption}</div>}
+                              {it.data.photo?.url && (
+                                <div style={{marginTop:8}}>
+                                  <img src={it.data.photo.url} alt={it.name} style={{width:"160px", borderRadius:10, border:"1px solid rgba(148,163,184,0.45)"}} />
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        <h4>Moisture Readings</h4>
+                        <div className="printGrid">
+                          {readItems.map(it => (
+                            <div key={`${it.id}-summary`} className="printListItem">
+                              <div><b>{it.name}</b> • {typeLabels[it.type] || it.type}</div>
+                              <div>Room/Elevation: {it.data.room} • {it.data.elevation}</div>
+                              {it.data.reading && <div>Reading: {it.data.reading} {it.data.units}</div>}
+                              {it.data.instrument && <div>Instrument: {it.data.instrument}</div>}
+                              {it.data.measurements && <div>Measurements: {it.data.measurements}</div>}
+                              {it.data.extent && <div>Extent: {it.data.extent}</div>}
+                              {it.data.tags && <div>Tags: {it.data.tags}</div>}
+                              {it.data.notes && <div>Notes: {it.data.notes}</div>}
+                              {it.data.photoCaption && <div>Photo caption: {it.data.photoCaption}</div>}
+                              {it.data.photo?.url && (
+                                <div style={{marginTop:8}}>
+                                  <img src={it.data.photo.url} alt={it.name} style={{width:"160px", borderRadius:10, border:"1px solid rgba(148,163,184,0.45)"}} />
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        <h4>Lines & Notes</h4>
+                        <div className="printGrid">
+                          {[...lineItems, ...noteItems].map(it => (
+                            <div key={`${it.id}-summary`} className="printListItem">
+                              <div><b>{it.name}</b> • {typeLabels[it.type] || it.type}</div>
+                              <div>Room/Elevation: {it.data.room} • {it.data.elevation}</div>
+                              {it.type === "line" && <div>Line type: {it.data.lineType === "drain" ? "Drain" : "Plumbing"}</div>}
+                              {it.data.tags && <div>Tags: {it.data.tags}</div>}
+                              {it.data.notes && <div>Notes: {it.data.notes}</div>}
+                              {it.data.photoCaption && <div>Photo caption: {it.data.photoCaption}</div>}
+                              {it.data.photo?.url && (
+                                <div style={{marginTop:8}}>
+                                  <img src={it.data.photo.url} alt={it.name} style={{width:"160px", borderRadius:10, border:"1px solid rgba(148,163,184,0.45)"}} />
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </div>
                   <div className="printFoot">Generated with TitanMoisture v0.2</div>
                 </div>
